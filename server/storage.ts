@@ -22,6 +22,7 @@ export interface IStorage {
   // Audit Logs
   createAuditLog(log: InsertAuditLog): Promise<AuditLog>;
   getAuditLogs(): Promise<{log: AuditLog, user: User | null}[]>;
+  clearAuditLogs(): Promise<void>;
 
   // Settings
   getSetting(key: string): Promise<any>;
@@ -171,8 +172,14 @@ export class DatabaseStorage implements IStorage {
     await db.delete(users).where(eq(users.id, id));
   }
 
-  async getEmployees(includeArchived: boolean = false, page: number = 1, limit: number = 50): Promise<Employee[]> {
+  async getEmployees(includeArchived: boolean = false, page: number = 1, limit: number = 50, all: boolean = false): Promise<Employee[]> {
     const offset = (page - 1) * limit;
+    if (all) {
+      // جلب جميع الموظفين بغض النظر عن حالتهم
+      return await db.select().from(employees)
+        .where(eq(employees.isDeleted, false))
+        .limit(500).offset(0).orderBy(desc(employees.createdAt));
+    }
     if (includeArchived) {
       // جلب الموظفين المؤرشفين فقط (الذين ليسوا على رأس عملهم)
       return await db.select().from(employees).where(
@@ -189,6 +196,10 @@ export class DatabaseStorage implements IStorage {
         eq(employees.currentStatus, "على رأس عمله")
       )
     ).limit(limit).offset(offset).orderBy(desc(employees.createdAt));
+  }
+
+  async clearAuditLogs(): Promise<void> {
+    await db.delete(auditLogs);
   }
   async getEmployee(id: number): Promise<Employee | undefined> {
     const [employee] = await db.select().from(employees).where(eq(employees.id, id));

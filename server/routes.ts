@@ -330,9 +330,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Employee Routes
   app.get(api.employees.list.path, async (req, res) => {
     const includeArchived = req.query.includeArchived === 'true';
+    const all = req.query.all === 'true';
     const page = parseInt(req.query.page as string) || 1;
     const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
-    const employees = await storage.getEmployees(includeArchived, page, limit);
+    const employees = await storage.getEmployees(includeArchived, page, limit, all);
     res.json(employees);
   });
 
@@ -706,6 +707,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
     const logs = await storage.getAuditLogs();
     res.json(logs);
+  });
+
+  app.delete('/api/audit-logs', async (req, res) => {
+    if (req.user?.role !== 'admin') {
+      return res.status(403).json({ message: "Forbidden: Admin access required" });
+    }
+    try {
+      await storage.clearAuditLogs();
+      res.json({ message: "تم مسح سجل العمليات بنجاح" });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message || "خطأ أثناء مسح السجل" });
+    }
   });
 
   // Settings & Backup Routes
