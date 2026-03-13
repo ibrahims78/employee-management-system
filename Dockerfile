@@ -19,12 +19,8 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/shared ./shared
 COPY --from=builder /app/drizzle.config.ts ./drizzle.config.ts
 
-# --- الحل الجديد ---
-# نسخ أي ملفات SQL قد يحتاجها التطبيق في مجلد dist
-# هذا السطر يضمن وجود ملف table.sql داخل الحاوية النهائية
-COPY --from=builder /app/*.sql ./dist/ 2>/dev/null || :
-COPY --from=builder /app/dist/*.sql ./dist/ 2>/dev/null || :
-# ------------------
+# نسخ ملف جدول الجلسات إلى المجلد المطلوب
+COPY table.sql ./dist/table.sql
 
 RUN mkdir -p storage/uploads storage/temp_uploads storage/backups
 
