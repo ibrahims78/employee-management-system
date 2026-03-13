@@ -12,14 +12,14 @@ set "APP_PORT=5001"
 set "LOG_FILE=%INSTALL_DIR%\setup_report.txt"
 
 cls
-echo [1/7] Checking Administrator privileges...
+echo [1/8] Checking Administrator privileges...
 net session >nul 2>&1
 if %errorLevel% NEQ 0 (
     echo [ERROR] Please run as Administrator.
     pause & exit
 )
 
-echo [2/7] Checking Git...
+echo [2/8] Checking Git...
 git --version >nul 2>&1
 if %errorLevel% NEQ 0 (
     echo [INFO] Installing Git...
@@ -27,28 +27,37 @@ if %errorLevel% NEQ 0 (
     start /wait "" "%TEMP%\git_installer.exe" /VERYSILENT
 )
 
-echo [3/7] Checking Docker...
+echo [3/8] Checking Docker...
 docker info >nul 2>&1
 if %errorLevel% NEQ 0 (
     echo [ERROR] Docker is not running. Please start Docker Desktop.
     pause & exit
 )
 
-echo [4/7] Cloning/Updating Repository...
+echo [4/8] Cloning/Updating Repository...
 if exist "%INSTALL_DIR%\.git" (
     cd /d "%INSTALL_DIR%"
     git pull origin main
+    if %errorLevel% NEQ 0 (
+        echo [ERROR] Failed to pull latest changes from GitHub.
+        pause & exit
+    )
+    echo [OK] Repository updated successfully.
 ) else (
     git clone --depth 1 %REPO_URL% "%INSTALL_DIR%"
+    if %errorLevel% NEQ 0 (
+        echo [ERROR] Failed to clone repository.
+        pause & exit
+    )
+    echo [OK] Repository cloned successfully.
 )
 
-echo [5/7] Setting Up Permissions...
+echo [5/8] Setting Up Permissions...
 if not exist "%INSTALL_DIR%\storage" mkdir "%INSTALL_DIR%\storage"
-:: حماية المجلد: المسؤولين تحكم كامل، المستخدمين قراءة فقط، المجلدات التقنية تعديل
 icacls "%INSTALL_DIR%" /inheritance:r /grant:r Administrators:(OI)(CI)F /grant:r Users:(OI)(CI)RX
 icacls "%INSTALL_DIR%\storage" /grant:r Users:(OI)(CI)M
 
-echo [6/7] Building Containers...
+echo [6/8] Building and Starting Containers...
 cd /d "%INSTALL_DIR%"
 docker compose down >nul 2>&1
 docker compose up --build -d
@@ -56,8 +65,36 @@ if %errorLevel% NEQ 0 (
     echo [ERROR] Docker Build Failed.
     pause & exit
 )
+echo [OK] Containers started. Waiting for application to initialize...
 
-echo [7/7] Finalizing...
+:: انتظار 10 ثوانٍ حتى يكتمل بدء التشغيل
+timeout /t 10 /nobreak >nul
+
+echo [7/8] Verifying Application Status...
+echo.
+echo --- Container Status ---
+docker ps --filter "name=staff-health" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+echo.
+echo --- Application Logs (last 20 lines) ---
+docker logs staff-health-app --tail 20
+echo.
+
+:: التحقق من رسالة النجاح في اللوغ
+docker logs staff-health-app 2>&1 | findstr /C:"Starting application" >nul
+if %errorLevel% EQU 0 (
+    echo [OK] Application is running successfully!
+) else (
+    echo [WARN] Application may still be initializing. Check logs above for details.
+)
+
+echo [8/8] Finalizing...
+echo.
+echo ================================================
+echo   Setup Complete!
+echo   Open: http://localhost:%APP_PORT%
+echo   Login: admin / 123456
+echo ================================================
+echo.
 start http://localhost:%APP_PORT%
-echo Setup Complete. Report saved to %LOG_FILE%
+echo Setup report saved to: %LOG_FILE%
 pause
