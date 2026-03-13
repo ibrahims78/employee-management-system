@@ -8,12 +8,14 @@ services:
       - "5001:5001"
     environment:
       - DATABASE_URL=postgres://hruser:hrpassword@db:5432/hr_db
-      - NODE_ENV=production
+      - NODE_ENV=development
       - PORT=5001
-      # تم إضافة كلمة سر قوية وثابتة للجلسات لمنع أخطاء 401
-      - SESSION_SECRET=SH_Secure_2026_Admin_Auth_Key_Fixed 
+      - SESSION_SECRET=SH_Secure_2026_Admin_Auth_Key_Fixed
     volumes:
       - ./storage:/app/storage
+    # هذا الأمر سيقوم بتصفير حالة المتصلين في قاعدة البيانات قبل بدء التطبيق
+    command: >
+      sh -c "node scripts/clear-sessions.js && npm start"
     depends_on:
       db:
         condition: service_healthy
