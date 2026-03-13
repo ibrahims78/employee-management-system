@@ -61,6 +61,16 @@ export function setupAuth(app: Express) {
   app.use(passport.initialize());
   app.use(passport.session());
 
+  // On startup: reset any stuck isOnline flags left from a previous crash/restart
+  (async () => {
+    try {
+      await storage.resetAllOnlineStatus();
+      console.log("Reset all user online statuses on startup");
+    } catch (err) {
+      console.error("Error resetting online statuses:", err);
+    }
+  })();
+
   // Create default admin user on startup
   (async () => {
     try {

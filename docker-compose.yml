@@ -8,7 +8,7 @@ services:
       - "5001:5001"
     environment:
       - DATABASE_URL=postgres://hruser:hrpassword@db:5432/hr_db
-      - NODE_ENV=development
+      - NODE_ENV=production
       - PORT=5001
       - SESSION_SECRET=SH_Secure_2026_Fixed_Key
     volumes:

@@ -11,6 +11,7 @@ export interface IStorage {
   getUsers(): Promise<User[]>;
   updateUser(id: string, updates: Partial<User>): Promise<User>;
   deleteUser(id: string): Promise<void>;
+  resetAllOnlineStatus(): Promise<void>;
 
   // Employees
   getEmployees(includeArchived?: boolean, page?: number, limit?: number, all?: boolean): Promise<Employee[]>;
@@ -170,6 +171,9 @@ export class DatabaseStorage implements IStorage {
   }
   async deleteUser(id: string): Promise<void> {
     await db.delete(users).where(eq(users.id, id));
+  }
+  async resetAllOnlineStatus(): Promise<void> {
+    await db.update(users).set({ isOnline: false, lastLogoutAt: new Date() });
   }
 
   async getEmployees(includeArchived: boolean = false, page: number = 1, limit: number = 50, all: boolean = false): Promise<Employee[]> {
