@@ -11,6 +11,7 @@ services:
       - NODE_ENV=production
       - PORT=5001
       - SESSION_SECRET=SH_Secure_2026_Fixed_Key
+      - COOKIE_SECURE=false
     volumes:
       - ./storage:/app/storage
     depends_on:

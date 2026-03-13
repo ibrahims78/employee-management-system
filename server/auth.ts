@@ -47,7 +47,7 @@ export function setupAuth(app: Express) {
       rolling: true, // Reset cookie expiration on every response
       cookie: {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
+        secure: process.env.COOKIE_SECURE === "true",
         sameSite: "lax",
         maxAge: 10 * 60 * 1000, // 10 minutes session timeout
       },
