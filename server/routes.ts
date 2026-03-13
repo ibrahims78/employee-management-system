@@ -359,7 +359,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const includeArchived = req.query.includeArchived === 'true';
     const all = req.query.all === 'true';
     const page = parseInt(req.query.page as string) || 1;
-    const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
+    // When all=true, no limit is applied (handled in storage layer)
+    const limit = all ? 10000 : Math.min(parseInt(req.query.limit as string) || 50, 100);
     const employees = await storage.getEmployees(includeArchived, page, limit, all);
     res.json(employees);
   });

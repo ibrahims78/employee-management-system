@@ -179,13 +179,25 @@ export class DatabaseStorage implements IStorage {
   async getEmployees(includeArchived: boolean = false, page: number = 1, limit: number = 50, all: boolean = false): Promise<Employee[]> {
     const offset = (page - 1) * limit;
     if (all) {
-      // جلب جميع الموظفين بغض النظر عن حالتهم
-      return await db.select().from(employees)
-        .where(eq(employees.isDeleted, false))
-        .limit(500).offset(0).orderBy(desc(employees.createdAt));
+      if (includeArchived) {
+        // جلب جميع الموظفين المؤرشفين بدون حد
+        return await db.select().from(employees).where(
+          and(
+            eq(employees.isDeleted, false),
+            notInArray(employees.currentStatus, ["على رأس عمله"])
+          )
+        ).orderBy(desc(employees.createdAt));
+      }
+      // جلب جميع الموظفين النشطين بدون حد
+      return await db.select().from(employees).where(
+        and(
+          eq(employees.isDeleted, false),
+          eq(employees.currentStatus, "على رأس عمله")
+        )
+      ).orderBy(desc(employees.createdAt));
     }
     if (includeArchived) {
-      // جلب الموظفين المؤرشفين فقط (الذين ليسوا على رأس عملهم)
+      // جلب الموظفين المؤرشفين فقط مع التصفح
       return await db.select().from(employees).where(
         and(
           eq(employees.isDeleted, false),
@@ -193,7 +205,7 @@ export class DatabaseStorage implements IStorage {
         )
       ).limit(limit).offset(offset).orderBy(desc(employees.createdAt));
     }
-    // جلب الموظفين النشطين فقط (الذين على رأس عملهم)
+    // جلب الموظفين النشطين فقط مع التصفح
     return await db.select().from(employees).where(
       and(
         eq(employees.isDeleted, false),

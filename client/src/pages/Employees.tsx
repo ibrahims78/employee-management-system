@@ -730,17 +730,32 @@ function EmployeeFormDialog({
 }
 
 function ExcelExportDialog({ 
-  employees 
+  showArchived 
 }: { 
-  employees: Employee[] 
+  showArchived: boolean 
 }) {
   const [open, setOpen] = useState(false);
   const [selectedColumns, setSelectedColumns] = useState<string[]>(EXPORT_COLUMNS.map(c => c.id));
-  const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<number[]>(employees.map(e => e.id));
+  const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<number[]>([]);
+
+  // جلب جميع الموظفين عند فتح نافذة التصدير
+  const { data: allEmployees = [], isLoading: isLoadingAll } = useQuery<Employee[]>({
+    queryKey: ['/api/employees/all-export', { showArchived }],
+    queryFn: async () => {
+      const params = new URLSearchParams({ all: 'true' });
+      if (showArchived) params.append('includeArchived', 'true');
+      const res = await fetch(`/api/employees?${params.toString()}`, { credentials: 'include' });
+      if (!res.ok) throw new Error('فشل في جلب بيانات الموظفين');
+      return res.json();
+    },
+    enabled: open,
+  });
 
   useEffect(() => {
-    setSelectedEmployeeIds(employees.map(e => e.id));
-  }, [employees]);
+    if (open && allEmployees.length > 0) {
+      setSelectedEmployeeIds(allEmployees.map(e => e.id));
+    }
+  }, [open, allEmployees]);
 
   const toggleColumn = (id: string) => {
     setSelectedColumns(prev => 
@@ -755,7 +770,7 @@ function ExcelExportDialog({
   };
 
   const handleExport = () => {
-    const selectedEmployees = employees.filter(emp => selectedEmployeeIds.includes(emp.id));
+    const selectedEmployees = allEmployees.filter(emp => selectedEmployeeIds.includes(emp.id));
     const data = selectedEmployees.map(emp => {
       const row: any = {};
       selectedColumns.forEach(colId => {
@@ -801,13 +816,21 @@ function ExcelExportDialog({
       </DialogTrigger>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>تصدير بيانات الموظفين إلى Excel</DialogTitle>
+          <DialogTitle>
+            تصدير بيانات {showArchived ? "الموظفين المؤرشفين" : "الموظفين"} إلى Excel
+          </DialogTitle>
         </DialogHeader>
-        
+
+        {isLoadingAll ? (
+          <div className="flex items-center justify-center py-16 text-muted-foreground gap-3">
+            <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+            <span>جاري تحميل بيانات جميع الموظفين...</span>
+          </div>
+        ) : (
         <Tabs defaultValue="columns" className="w-full">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="columns">اختيار الخانات</TabsTrigger>
-            <TabsTrigger value="employees">اختيار الموظفين</TabsTrigger>
+            <TabsTrigger value="employees">اختيار الموظفين ({allEmployees.length})</TabsTrigger>
           </TabsList>
           
           <TabsContent value="columns" className="py-4">
@@ -831,7 +854,7 @@ function ExcelExportDialog({
           
           <TabsContent value="employees" className="py-4">
             <div className="flex gap-2 mb-4">
-              <Button variant="outline" size="sm" onClick={() => setSelectedEmployeeIds(employees.map(e => e.id))}>تحديد الكل</Button>
+              <Button variant="outline" size="sm" onClick={() => setSelectedEmployeeIds(allEmployees.map(e => e.id))}>تحديد الكل</Button>
               <Button variant="outline" size="sm" onClick={() => setSelectedEmployeeIds([])}>إلغاء التحديد</Button>
             </div>
             <div className="max-h-[400px] overflow-y-auto border rounded-md">
@@ -844,7 +867,7 @@ function ExcelExportDialog({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {employees.map(emp => (
+                  {allEmployees.map(emp => (
                     <TableRow key={emp.id}>
                       <TableCell>
                         <Checkbox 
@@ -861,10 +884,17 @@ function ExcelExportDialog({
             </div>
           </TabsContent>
         </Tabs>
+        )}
 
         <div className="flex justify-end gap-2 pt-4 border-t">
           <Button variant="outline" onClick={() => setOpen(false)}>إلغاء</Button>
-          <Button onClick={handleExport} disabled={selectedColumns.length === 0 || selectedEmployeeIds.length === 0} data-testid="btn-export">تصدير الملف ({selectedEmployeeIds.length} موظف)</Button>
+          <Button 
+            onClick={handleExport} 
+            disabled={isLoadingAll || selectedColumns.length === 0 || selectedEmployeeIds.length === 0} 
+            data-testid="btn-export"
+          >
+            تصدير الملف ({selectedEmployeeIds.length} موظف)
+          </Button>
         </div>
       </DialogContent>
     </Dialog>
@@ -1059,7 +1089,7 @@ export default function Employees() {
                 </SelectContent>
               </Select>
             </div>
-            <ExcelExportDialog employees={filteredEmployees} />
+            <ExcelExportDialog showArchived={showArchived} />
           </div>
         </div>
 
