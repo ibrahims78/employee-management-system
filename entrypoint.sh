@@ -13,7 +13,8 @@ done
 
 echo "✅ Database is ready."
 echo "🔄 Running database migrations..."
-npx drizzle-kit push --force || echo "⚠️  Schema may already be up to date"
+# استخدام المسار المحلي للمكتبة لضمان التنفيذ الصحيح داخل الحاوية
+./node_modules/.bin/drizzle-kit push --force
 
 echo "🚀 Starting application on port $PORT..."
 exec node dist/index.cjs
