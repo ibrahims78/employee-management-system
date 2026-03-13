@@ -7,19 +7,17 @@ RUN npm run build
 
 FROM node:20-slim
 WORKDIR /app
-# تثبيت أدوات النظام الضرورية
+
 RUN apt-get update && apt-get install -y dos2unix && rm -rf /var/lib/apt/lists/*
 
-COPY package*.json ./
-# تثبيت حزم الإنتاج مع تثبيت drizzle-kit بشكل صريح
-RUN npm install --production && npm install drizzle-kit
+# Copy node_modules from builder instead of re-downloading from npm
+COPY --from=builder /app/node_modules ./node_modules
 
-# نسخ ملفات التطبيق المبنية
+# Copy built application files
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/shared ./shared
 COPY --from=builder /app/drizzle.config.ts ./drizzle.config.ts
 
-# نسخ ملف جدول الجلسات إلى المجلد المطلوب
 COPY table.sql ./dist/table.sql
 
 RUN mkdir -p storage/uploads storage/temp_uploads storage/backups
