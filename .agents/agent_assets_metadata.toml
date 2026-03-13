@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "LV_X7Cw6DLRqGoqH8zocr"
+uri = "file://دليل_النشر_المحلي_Docker.txt"
+type = "text"
+title = "دليل نشر التطبيق على Docker - ويندوز 10"
