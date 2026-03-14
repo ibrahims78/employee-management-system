@@ -13,7 +13,20 @@ import SettingsPage from "@/pages/Settings";
 import { useAuth } from "@/hooks/use-auth";
 import { Loader2 } from "lucide-react";
 import { ThemeProvider } from "next-themes";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+
+const SESSION_TIMEOUT_MS = 10 * 60 * 1000;
+const WARNING_BEFORE_MS = 60 * 1000;
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, isLoading } = useAuth();
@@ -73,13 +86,23 @@ function App() {
 function AppContent() {
   const { user, logoutMutation } = useAuth();
   const timeoutRef = useRef<NodeJS.Timeout>();
+  const warningRef = useRef<NodeJS.Timeout>();
+  const [showWarning, setShowWarning] = useState(false);
 
   const resetTimer = () => {
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    if (warningRef.current) clearTimeout(warningRef.current);
+    setShowWarning(false);
+
     if (user) {
+      warningRef.current = setTimeout(() => {
+        setShowWarning(true);
+      }, SESSION_TIMEOUT_MS - WARNING_BEFORE_MS);
+
       timeoutRef.current = setTimeout(() => {
+        setShowWarning(false);
         logoutMutation.mutate();
-      }, 10 * 60 * 1000); // 10 minutes
+      }, SESSION_TIMEOUT_MS);
     }
   };
 
@@ -95,10 +118,43 @@ function AppContent() {
     return () => {
       events.forEach(event => document.removeEventListener(event, handler));
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      if (warningRef.current) clearTimeout(warningRef.current);
     };
   }, [user, logoutMutation]);
 
-  return <Router />;
+  const handleExtendSession = () => {
+    setShowWarning(false);
+    resetTimer();
+  };
+
+  const handleLogoutNow = () => {
+    setShowWarning(false);
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    if (warningRef.current) clearTimeout(warningRef.current);
+    logoutMutation.mutate();
+  };
+
+  return (
+    <>
+      <Router />
+      <AlertDialog open={showWarning} onOpenChange={setShowWarning}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-right text-amber-600">⚠️ تنبيه: الجلسة على وشك الانتهاء</AlertDialogTitle>
+            <AlertDialogDescription className="text-right">
+              ستنتهي جلستك خلال دقيقة واحدة بسبب عدم النشاط. هل تريد تمديد الجلسة والاستمرار في العمل؟
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-row-reverse gap-2">
+            <AlertDialogCancel onClick={handleLogoutNow}>تسجيل الخروج الآن</AlertDialogCancel>
+            <AlertDialogAction onClick={handleExtendSession} className="bg-primary">
+              تمديد الجلسة
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
 }
 
 export default App;

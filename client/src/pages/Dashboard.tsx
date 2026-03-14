@@ -1,15 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
 import { StatsCard } from "@/components/StatsCard";
-import { Users, UserCheck, Briefcase, GraduationCap, ShieldCheck, UserX, UserMinus, Send } from "lucide-react";
+import { Users, UserCheck, Briefcase, GraduationCap, ShieldCheck, UserX, UserMinus, Send, Paperclip } from "lucide-react";
 import { Layout } from "@/components/Layout";
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recharts";
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useUsers } from "@/hooks/use-users";
 import { useAuth } from "@/hooks/use-auth";
 import type { Employee } from "@shared/schema";
 
-// جميع الأوضاع المعرّفة في النظام
 const ALL_STATUSES = ['على رأس عمله', 'إجازة بلا أجر', 'نقل', 'استقالة'];
 
 const STATUS_COLORS: Record<string, string> = {
@@ -28,11 +28,73 @@ const STATUS_ICONS: Record<string, any> = {
 
 const CHART_COLORS = ['#22c55e', '#f97316', '#0ea5e9', '#ef4444', '#8b5cf6', '#ec4899'];
 
+function DashboardSkeleton() {
+  return (
+    <Layout>
+      <div className="space-y-8">
+        <div>
+          <Skeleton className="h-9 w-48 mb-2" />
+          <Skeleton className="h-4 w-72" />
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="rounded-2xl border bg-card p-6 space-y-3">
+              <div className="flex items-start justify-between">
+                <div className="space-y-2">
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-8 w-16" />
+                  <Skeleton className="h-3 w-32" />
+                </div>
+                <Skeleton className="h-12 w-12 rounded-xl" />
+              </div>
+            </div>
+          ))}
+        </div>
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <Skeleton className="h-6 w-56" />
+            <Skeleton className="h-4 w-32" />
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="rounded-xl border bg-card p-5 space-y-3">
+                <div className="flex items-start justify-between">
+                  <Skeleton className="h-9 w-9 rounded-lg" />
+                  <Skeleton className="h-8 w-12" />
+                </div>
+                <Skeleton className="h-4 w-20" />
+                <Skeleton className="h-1.5 w-full rounded-full" />
+                <Skeleton className="h-3 w-24" />
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="grid gap-6 lg:grid-cols-3">
+          <div className="lg:col-span-2 rounded-xl border bg-card p-6">
+            <Skeleton className="h-6 w-48 mb-4" />
+            <Skeleton className="h-[280px] w-full rounded-lg" />
+          </div>
+          <div className="space-y-6">
+            <div className="rounded-xl border bg-card p-5">
+              <Skeleton className="h-5 w-28 mb-3" />
+              <Skeleton className="h-[150px] w-full rounded-lg" />
+            </div>
+            <div className="rounded-xl border bg-card p-5 space-y-3">
+              <Skeleton className="h-8 w-8 rounded-lg" />
+              <Skeleton className="h-6 w-12" />
+              <Skeleton className="h-4 w-32" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </Layout>
+  );
+}
+
 export default function Dashboard() {
   const { data: allEmployees = [], isLoading: empLoading } = useQuery<Employee[]>({
     queryKey: ['/api/employees', { allStatuses: true }],
     queryFn: async () => {
-      // جلب جميع الموظفين بجميع الأوضاع (نشطين + مؤرشفين) للإحصائيات الصحيحة
       const res = await fetch('/api/employees?allStatuses=true', { credentials: 'include' });
       if (!res.ok) throw new Error("Failed to fetch employees");
       return res.json();
@@ -44,7 +106,7 @@ export default function Dashboard() {
   const isLoading = empLoading || usersLoading;
 
   if (isLoading) {
-    return <Layout><div className="flex h-96 items-center justify-center">جاري التحميل...</div></Layout>;
+    return <DashboardSkeleton />;
   }
 
   const activeUsers = users?.filter(u => u.isOnline) || [];
@@ -54,33 +116,29 @@ export default function Dashboard() {
   const categorySecond = allEmployees.filter(e => e.category === "ثانية").length;
   const categoryThird = allEmployees.filter(e => e.category === "ثالثة").length;
   const categoryFourth = allEmployees.filter(e => e.category === "رابعة").length;
+  const withFiles = allEmployees.filter(e => Array.isArray(e.documentPaths) && (e.documentPaths as string[]).length > 0).length;
 
-  // حساب توزع جميع الأوضاع
   const statusCounts = allEmployees.reduce((acc, emp) => {
     const status = emp.currentStatus || 'غير محدد';
     acc[status] = (acc[status] || 0) + 1;
     return acc;
   }, {} as Record<string, number>);
 
-  // إضافة جميع الأوضاع المعرّفة حتى لو كانت صفراً
   for (const status of ALL_STATUSES) {
     if (!(status in statusCounts)) {
       statusCounts[status] = 0;
     }
   }
 
-  // ترتيب الأوضاع: المعرّفة أولاً بالترتيب، ثم أي أوضاع إضافية — فقط التي لها موظفون
   const orderedStatuses = [
     ...ALL_STATUSES,
     ...Object.keys(statusCounts).filter(s => !ALL_STATUSES.includes(s)),
   ].filter(status => statusCounts[status] > 0);
 
-  // بيانات المخطط الدائري - فقط الأوضاع التي لها موظفون
   const chartData = orderedStatuses
     .filter(status => statusCounts[status] > 0)
     .map(status => ({ name: status, value: statusCounts[status] }));
 
-  // توزع الجنس
   const maleCount = allEmployees.filter(e => e.gender === 'ذكر').length;
   const femaleCount = allEmployees.filter(e => e.gender === 'أنثى').length;
   const genderData = [
@@ -89,6 +147,17 @@ export default function Dashboard() {
   ].filter(d => d.value > 0);
 
   const recentEmployees = [...allEmployees].slice(0, 6);
+
+  const specializationCounts = allEmployees.reduce((acc, emp) => {
+    const spec = emp.specialization || 'غير محدد';
+    acc[spec] = (acc[spec] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  const topSpecializations = Object.entries(specializationCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 7)
+    .map(([name, value]) => ({ name: name.length > 18 ? name.slice(0, 16) + '…' : name, value, fullName: name }));
 
   return (
     <Layout>
@@ -99,7 +168,7 @@ export default function Dashboard() {
         </div>
 
         {/* إحصائيات رئيسية */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
           <StatsCard
             title="إجمالي الموظفين"
             value={totalEmployees}
@@ -135,9 +204,16 @@ export default function Dashboard() {
             color="red"
             description="الخدمات والمهن"
           />
+          <StatsCard
+            title="لديهم ملفات"
+            value={withFiles}
+            icon={Paperclip}
+            color="green"
+            description="موظفون بمستندات مرفوعة"
+          />
         </div>
 
-        {/* توزع الموظفين حسب الوضع الحالي - جميع الأوضاع */}
+        {/* توزع الموظفين حسب الوضع الحالي */}
         <div>
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-bold text-foreground">توزع الموظفين حسب الوضع الحالي</h2>
@@ -170,7 +246,7 @@ export default function Dashboard() {
                     <div className="mt-2">
                       <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
                         <div
-                          className="h-full rounded-full transition-all duration-500"
+                          className="h-full rounded-full transition-all duration-700"
                           style={{ width: `${pct}%`, backgroundColor: color }}
                         />
                       </div>
@@ -187,7 +263,6 @@ export default function Dashboard() {
 
         {/* الرسوم البيانية */}
         <div className="grid gap-6 lg:grid-cols-3">
-          {/* مخطط دائري للأوضاع */}
           <Card className="lg:col-span-2 shadow-lg border-border/50">
             <CardHeader>
               <CardTitle className="text-lg font-bold">الرسم البياني لتوزع الأوضاع</CardTitle>
@@ -232,7 +307,6 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          {/* توزع الجنس والمستخدمون النشطون */}
           <div className="space-y-6">
             <Card className="shadow-lg border-border/50">
               <CardHeader className="pb-2">
@@ -275,6 +349,34 @@ export default function Dashboard() {
             )}
           </div>
         </div>
+
+        {/* توزع الاختصاصات */}
+        {topSpecializations.length > 0 && (
+          <Card className="shadow-lg border-border/50">
+            <CardHeader>
+              <CardTitle className="text-lg font-bold">توزع الموظفين حسب الاختصاص (أعلى 7)</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="h-[240px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={topSpecializations} layout="vertical" margin={{ right: 30, left: 8, top: 4, bottom: 4 }}>
+                    <XAxis type="number" tick={{ fontSize: 12 }} />
+                    <YAxis type="category" dataKey="name" width={130} tick={{ fontSize: 11, textAnchor: 'end' }} />
+                    <Tooltip
+                      formatter={(value: number, _name: string, props: any) => [value + ' موظف', props.payload?.fullName || '']}
+                      contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontFamily: 'inherit' }}
+                    />
+                    <Bar dataKey="value" fill="#3b82f6" radius={[0, 6, 6, 0]}>
+                      {topSpecializations.map((_, index) => (
+                        <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* آخر الموظفين */}
         <Card className="shadow-lg border-border/50">
