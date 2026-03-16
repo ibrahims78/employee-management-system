@@ -190,14 +190,49 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.status(401).send("Unauthorized");
   }, express.static(uploadsDir));
 
+  // Returns whether API key enforcement is active (false when no keys exist yet = bootstrap mode)
+  app.get("/api/auth/setup-status", async (_req, res) => {
+    try {
+      const keys = await storage.getApiKeys();
+      res.json({ apiKeyRequired: keys.length > 0 });
+    } catch {
+      res.json({ apiKeyRequired: false });
+    }
+  });
+
   // Auth Routes
   app.post(api.auth.login.path, loginLimiter, async (req, res, next) => {
-    const { username } = req.body;
+    const { username, apiKey } = req.body;
+
+    // ── Step 1: Validate API Key before anything else ──────────────────────
+    try {
+      const allKeys = await storage.getApiKeys();
+
+      // Bootstrap mode: if no API keys exist yet, allow login so admin can create the first key
+      if (allKeys.length > 0) {
+        if (!apiKey || typeof apiKey !== "string" || !apiKey.trim()) {
+          return res.status(401).json({ message: "مفتاح API مطلوب للدخول إلى النظام." });
+        }
+
+        const key = await storage.getApiKeyByValue(apiKey.trim());
+        if (!key) {
+          return res.status(401).json({ message: "مفتاح API غير صالح. يرجى التواصل مع مسؤول النظام." });
+        }
+        if (!key.isActive) {
+          return res.status(401).json({ message: "مفتاح API معطّل. يرجى التواصل مع مسؤول النظام لتفعيله." });
+        }
+        if (key.expiryDate && new Date() > new Date(key.expiryDate)) {
+          return res.status(401).json({ message: "انتهت صلاحية مفتاح API. يرجى طلب مفتاح جديد من المسؤول." });
+        }
+      }
+    } catch {
+      return res.status(500).json({ message: "حدث خطأ أثناء التحقق من مفتاح API." });
+    }
+
+    // ── Step 2: Check if user is already online ────────────────────────────
     const user = await storage.getUserByUsername(username);
     
     if (user && user.isOnline) {
-      // Allow override if lastLoginAt is older than the session timeout (10 min)
-      // This auto-recovers from stuck sessions caused by crashes/restarts/abandoned tabs
       const sessionTimeoutMs = 10 * 60 * 1000;
       const isStale = !user.lastLoginAt || 
         (Date.now() - new Date(user.lastLoginAt).getTime()) > sessionTimeoutMs;
@@ -207,14 +242,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           message: "المستخدم مسجل دخول بالفعل من جهاز آخر. يرجى تسجيل الخروج أولاً أو المحاولة لاحقاً." 
         });
       }
-      // Session expired → allow login and reset the stale isOnline flag
       await storage.updateUser(user.id, { isOnline: false });
     }
 
+    // ── Step 3: Authenticate username + password ───────────────────────────
     passport.authenticate("local", async (err: any, authenticatedUser: any, info: any) => {
       if (err) return next(err);
       if (!authenticatedUser) {
-        return res.status(401).json({ message: info?.message || "Invalid username or password" });
+        return res.status(401).json({ message: info?.message || "اسم المستخدم أو كلمة المرور غير صحيحة." });
       }
 
       req.login(authenticatedUser, async (loginErr) => {

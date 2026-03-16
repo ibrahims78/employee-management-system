@@ -3,139 +3,54 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useAuth } from "@/hooks/use-auth";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Building2, Lock, User, Key, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
+import { Building2, Lock, User, Key, Eye, EyeOff, Info, ShieldCheck } from "lucide-react";
 import { Redirect } from "wouter";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { apiRequest } from "@/lib/queryClient";
-import { useToast } from "@/hooks/use-toast";
 
-const loginSchema = z.object({
-  username: z.string().min(1, "اسم المستخدم مطلوب"),
-  password: z.string().min(1, "كلمة المرور مطلوبة"),
-});
-
-const apiKeySchema = z.object({
-  apiKey: z.string().min(10, "مفتاح API غير صالح"),
-});
-
-type LoginFormValues = z.infer<typeof loginSchema>;
-type ApiKeyFormValues = z.infer<typeof apiKeySchema>;
-
-function ApiKeyLoginForm() {
-  const { toast } = useToast();
-  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
-  const [errorMsg, setErrorMsg] = useState("");
-
-  const form = useForm<ApiKeyFormValues>({
-    resolver: zodResolver(apiKeySchema),
-    defaultValues: { apiKey: "" },
+function buildSchema(apiKeyRequired: boolean) {
+  return z.object({
+    username: z.string().min(1, "اسم المستخدم مطلوب"),
+    password: z.string().min(1, "كلمة المرور مطلوبة"),
+    apiKey: apiKeyRequired
+      ? z.string().min(1, "مفتاح API مطلوب للدخول إلى النظام")
+      : z.string().optional().default(""),
   });
-
-  async function onSubmit(data: ApiKeyFormValues) {
-    setStatus("loading");
-    setErrorMsg("");
-    try {
-      const res = await fetch("/api/auth/api-key-login", {
-        method: "POST",
-        headers: { "x-api-key": data.apiKey },
-      });
-      if (res.ok) {
-        setStatus("success");
-        toast({ title: "مفتاح API صالح وفعّال", description: "يمكنك استخدامه للوصول البرمجي للنظام." });
-      } else {
-        const body = await res.json().catch(() => ({ message: "مفتاح API غير صالح" }));
-        setStatus("error");
-        setErrorMsg(body.message || "مفتاح API غير صالح");
-      }
-    } catch {
-      setStatus("error");
-      setErrorMsg("تعذّر الاتصال بالخادم");
-    }
-  }
-
-  return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
-        <div className="p-4 rounded-xl bg-blue-500/5 border border-blue-500/20 text-xs text-blue-700 dark:text-blue-400 leading-relaxed space-y-1">
-          <p className="font-bold text-sm mb-1">للخدمات البرمجية والأنظمة الخارجية</p>
-          <p>أضف الهيدر التالي في كل طلب:</p>
-          <code className="block bg-blue-500/10 px-3 py-2 rounded font-mono mt-1 select-all text-blue-800 dark:text-blue-300">
-            x-api-key: {"<your-api-key>"}
-          </code>
-        </div>
-
-        <FormField
-          control={form.control}
-          name="apiKey"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel className="text-foreground/90 font-semibold">مفتاح API</FormLabel>
-              <FormControl>
-                <div className="relative group">
-                  <Key className="absolute right-3 top-3 h-4 w-4 text-muted-foreground transition-colors group-focus-within:text-primary" />
-                  <Input
-                    className="pr-9 border-primary/20 focus:border-primary transition-all bg-background/50 font-mono text-sm"
-                    placeholder="أدخل مفتاح API للتحقق منه..."
-                    autoComplete="off"
-                    data-testid="input-api-key"
-                    {...field}
-                  />
-                </div>
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        {status === "success" && (
-          <div className="flex items-center gap-2 p-3 rounded-lg bg-green-500/10 border border-green-500/20 text-green-700 dark:text-green-400 text-sm font-medium">
-            <CheckCircle2 className="h-4 w-4 shrink-0" />
-            مفتاح API صالح وفعّال — جاهز للاستخدام.
-          </div>
-        )}
-
-        {status === "error" && (
-          <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm font-medium">
-            <AlertCircle className="h-4 w-4 shrink-0" />
-            {errorMsg}
-          </div>
-        )}
-
-        <Button
-          type="submit"
-          variant="outline"
-          className="w-full text-base font-bold border-primary/30 hover:border-primary hover:bg-primary/5 transition-all"
-          disabled={status === "loading"}
-          data-testid="btn-verify-api-key"
-        >
-          {status === "loading" ? (
-            <Loader2 className="ml-2 h-4 w-4 animate-spin" />
-          ) : (
-            <Key className="ml-2 h-4 w-4" />
-          )}
-          {status === "loading" ? "جاري التحقق..." : "التحقق من المفتاح"}
-        </Button>
-      </form>
-    </Form>
-  );
 }
+
+type LoginFormValues = {
+  username: string;
+  password: string;
+  apiKey: string;
+};
 
 export default function Login() {
   const { login, isLoggingIn, user } = useAuth();
+  const [showApiKey, setShowApiKey] = useState(false);
+
+  const { data: setupStatus } = useQuery<{ apiKeyRequired: boolean }>({
+    queryKey: ["/api/auth/setup-status"],
+    queryFn: async () => {
+      const res = await fetch("/api/auth/setup-status");
+      return res.json();
+    },
+    retry: false,
+  });
+
+  const apiKeyRequired = setupStatus?.apiKeyRequired ?? false;
 
   const form = useForm<LoginFormValues>({
-    resolver: zodResolver(loginSchema),
-    defaultValues: { username: "", password: "" },
+    resolver: zodResolver(buildSchema(apiKeyRequired)),
+    defaultValues: { username: "", password: "", apiKey: "" },
   });
 
   if (user) return <Redirect to="/" />;
 
   function onSubmit(data: LoginFormValues) {
-    login(data);
+    login({ username: data.username, password: data.password, apiKey: data.apiKey ?? "" });
   }
 
   return (
@@ -146,93 +61,143 @@ export default function Login() {
         <div className="absolute -right-16 -top-16 h-32 w-32 rounded-full bg-primary/5 blur-3xl" />
         <div className="absolute -left-16 -bottom-16 h-32 w-32 rounded-full bg-primary/5 blur-3xl" />
 
-        <CardHeader className="space-y-4 pb-6 text-center">
+        <CardHeader className="space-y-4 pb-8 text-center">
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-xl shadow-primary/25 transform transition-transform hover:scale-105">
             <Building2 className="h-8 w-8" />
           </div>
           <div className="space-y-2">
-            <CardTitle className="text-3xl font-bold tracking-tight text-primary">برنامج ذاتية الموظفين في المكتب الهندسي</CardTitle>
-            <CardDescription className="text-muted-foreground/80">أدخل بيانات الدخول للمتابعة</CardDescription>
+            <CardTitle className="text-3xl font-bold tracking-tight text-primary">
+              برنامج ذاتية الموظفين في المكتب الهندسي
+            </CardTitle>
+            <CardDescription className="text-muted-foreground/80">
+              أدخل بيانات الدخول للمتابعة
+            </CardDescription>
           </div>
         </CardHeader>
 
         <CardContent>
-          <Tabs defaultValue="user" className="w-full">
-            <TabsList className="w-full mb-6 bg-muted/50 border border-primary/10">
-              <TabsTrigger value="user" className="flex-1 gap-2 font-bold data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-                <User className="h-4 w-4" />
-                دخول المستخدمين
-              </TabsTrigger>
-              <TabsTrigger value="api" className="flex-1 gap-2 font-bold data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-                <Key className="h-4 w-4" />
-                مفتاح API
-              </TabsTrigger>
-            </TabsList>
+          {/* Bootstrap mode notice */}
+          {!apiKeyRequired && (
+            <div className="mb-5 flex items-start gap-2 p-3 rounded-xl bg-blue-500/8 border border-blue-500/20 text-xs text-blue-700 dark:text-blue-400">
+              <Info className="h-4 w-4 shrink-0 mt-0.5" />
+              <span>
+                <strong>وضع التشغيل الأول:</strong> لا توجد مفاتيح API بعد. سجّل دخولك كمدير وأنشئ المفاتيح من صفحة الإعدادات.
+              </span>
+            </div>
+          )}
 
-            <TabsContent value="user" className="space-y-0 mt-0">
-              <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-                  <FormField
-                    control={form.control}
-                    name="username"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-foreground/90 font-semibold">اسم المستخدم</FormLabel>
-                        <FormControl>
-                          <div className="relative group">
-                            <User className="absolute right-3 top-3 h-4 w-4 text-muted-foreground transition-colors group-focus-within:text-primary" />
-                            <Input
-                              className="pr-9 border-primary/20 focus:border-primary transition-all bg-background/50"
-                              placeholder="admin"
-                              autoComplete="username"
-                              data-testid="input-username"
-                              {...field}
-                            />
-                          </div>
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="password"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-foreground/90 font-semibold">كلمة المرور</FormLabel>
-                        <FormControl>
-                          <div className="relative group">
-                            <Lock className="absolute right-3 top-3 h-4 w-4 text-muted-foreground transition-colors group-focus-within:text-primary" />
-                            <Input
-                              className="pr-9 border-primary/20 focus:border-primary transition-all bg-background/50"
-                              type="password"
-                              placeholder="••••••"
-                              autoComplete="current-password"
-                              data-testid="input-password"
-                              {...field}
-                            />
-                          </div>
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <Button
-                    type="submit"
-                    className="w-full text-base font-bold shadow-lg shadow-primary/25 transition-all hover:shadow-xl hover:shadow-primary/30 active:scale-[0.98]"
-                    disabled={isLoggingIn}
-                    data-testid="btn-login"
-                  >
-                    {isLoggingIn ? "جاري الدخول..." : "تسجيل الدخول"}
-                  </Button>
-                </form>
-              </Form>
-            </TabsContent>
+          {/* API key enforcement active badge */}
+          {apiKeyRequired && (
+            <div className="mb-5 flex items-center gap-2 p-3 rounded-xl bg-green-500/8 border border-green-500/20 text-xs text-green-700 dark:text-green-400">
+              <ShieldCheck className="h-4 w-4 shrink-0" />
+              <span className="font-bold">حماية API Key مفعّلة — يتطلب مفتاح صالح للدخول.</span>
+            </div>
+          )}
 
-            <TabsContent value="api" className="mt-0">
-              <ApiKeyLoginForm />
-            </TabsContent>
-          </Tabs>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
+              {/* Username */}
+              <FormField
+                control={form.control}
+                name="username"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-foreground/90 font-semibold">اسم المستخدم</FormLabel>
+                    <FormControl>
+                      <div className="relative group">
+                        <User className="absolute right-3 top-3 h-4 w-4 text-muted-foreground transition-colors group-focus-within:text-primary" />
+                        <Input
+                          className="pr-9 border-primary/20 focus:border-primary transition-all bg-background/50"
+                          placeholder="admin"
+                          autoComplete="username"
+                          data-testid="input-username"
+                          {...field}
+                        />
+                      </div>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Password */}
+              <FormField
+                control={form.control}
+                name="password"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-foreground/90 font-semibold">كلمة المرور</FormLabel>
+                    <FormControl>
+                      <div className="relative group">
+                        <Lock className="absolute right-3 top-3 h-4 w-4 text-muted-foreground transition-colors group-focus-within:text-primary" />
+                        <Input
+                          className="pr-9 border-primary/20 focus:border-primary transition-all bg-background/50"
+                          type="password"
+                          placeholder="••••••"
+                          autoComplete="current-password"
+                          data-testid="input-password"
+                          {...field}
+                        />
+                      </div>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* API Key */}
+              <FormField
+                control={form.control}
+                name="apiKey"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-foreground/90 font-semibold flex items-center gap-2">
+                      <Key className="h-4 w-4 text-primary" />
+                      مفتاح API
+                      {!apiKeyRequired && (
+                        <span className="text-xs font-normal text-muted-foreground">(اختياري في هذه المرحلة)</span>
+                      )}
+                    </FormLabel>
+                    <FormControl>
+                      <div className="relative group">
+                        <Input
+                          className={`pl-10 border-primary/20 focus:border-primary transition-all bg-background/50 font-mono text-sm tracking-wider ${apiKeyRequired ? "border-primary/40" : ""}`}
+                          type={showApiKey ? "text" : "password"}
+                          placeholder={apiKeyRequired ? "أدخل مفتاح API الخاص بك *" : "أدخل مفتاح API (اختياري)"}
+                          autoComplete="off"
+                          data-testid="input-api-key"
+                          {...field}
+                        />
+                        <button
+                          type="button"
+                          tabIndex={-1}
+                          className="absolute left-3 top-3 text-muted-foreground hover:text-primary transition-colors"
+                          onClick={() => setShowApiKey((v) => !v)}
+                        >
+                          {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      </div>
+                    </FormControl>
+                    <FormMessage />
+                    {apiKeyRequired && (
+                      <p className="text-xs text-muted-foreground/70 mt-1">
+                        مطلوب من مسؤول النظام قبل الدخول. راجع صفحة الإعدادات.
+                      </p>
+                    )}
+                  </FormItem>
+                )}
+              />
+
+              <Button
+                type="submit"
+                className="w-full text-base font-bold shadow-lg shadow-primary/25 transition-all hover:shadow-xl hover:shadow-primary/30 active:scale-[0.98] mt-2"
+                disabled={isLoggingIn}
+                data-testid="btn-login"
+              >
+                {isLoggingIn ? "جاري الدخول..." : "تسجيل الدخول"}
+              </Button>
+            </form>
+          </Form>
 
           <div className="mt-8 pt-6 border-t border-primary/10 text-center">
             <p className="text-xs text-muted-foreground/60 font-medium tracking-wide uppercase flex items-center justify-center gap-2">
