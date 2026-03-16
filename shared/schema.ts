@@ -78,6 +78,20 @@ export const auditLogsRelations = relations(auditLogs, ({ one }) => ({
   }),
 }));
 
+export const apiKeys = pgTable("api_keys", {
+  id: serial("id").primaryKey(),
+  keyValue: text("key_value").notNull().unique(),
+  description: text("description").notNull(),
+  expiryDate: timestamp("expiry_date"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: "set null" }),
+});
+
+export const insertApiKeySchema = createInsertSchema(apiKeys).omit({ id: true, keyValue: true, createdAt: true });
+export type ApiKey = typeof apiKeys.$inferSelect;
+export type InsertApiKey = z.infer<typeof insertApiKeySchema>;
+
 export const insertUserSchema = createInsertSchema(users).omit({ id: true });
 export const insertEmployeeSchema = createInsertSchema(employees, {
   fullName: z.string().optional(),

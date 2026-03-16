@@ -5,10 +5,11 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Loader2, Download, RefreshCw, Clock, ShieldAlert, Trash2, Database, AlertTriangle, CheckCircle2, Upload, FileSpreadsheet } from "lucide-react";
+import { Loader2, Download, RefreshCw, Clock, ShieldAlert, Trash2, Database, AlertTriangle, CheckCircle2, Upload, FileSpreadsheet, Key, Plus, Eye, EyeOff, Copy, ToggleLeft, ToggleRight } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -19,10 +20,311 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
+
+// ─── API Keys Management Card ────────────────────────────────────────────────
+function ApiKeysCard() {
+  const { toast } = useToast();
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newKey, setNewKey] = useState<{ keyValue: string; description: string } | null>(null);
+  const [deleteKeyId, setDeleteKeyId] = useState<number | null>(null);
+  const [form, setForm] = useState({ description: "", expiryDate: "" });
+  const [copied, setCopied] = useState(false);
+
+  const { data: keys = [], isLoading } = useQuery<any[]>({
+    queryKey: ["/api/api-keys"],
+    retry: false,
+  });
+
+  const createMutation = useMutation({
+    mutationFn: async (data: { description: string; expiryDate?: string }) => {
+      const res = await apiRequest("POST", "/api/api-keys", data);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/api-keys"] });
+      setShowCreateModal(false);
+      setNewKey({ keyValue: data.keyValue, description: data.description });
+      setForm({ description: "", expiryDate: "" });
+    },
+    onError: (e: any) => {
+      toast({ title: "فشل إنشاء المفتاح", description: e.message, variant: "destructive" });
+    },
+  });
+
+  const toggleMutation = useMutation({
+    mutationFn: async ({ id, isActive }: { id: number; isActive: boolean }) => {
+      const res = await apiRequest("PATCH", `/api/api-keys/${id}`, { isActive });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/api-keys"] });
+      toast({ title: "تم تحديث حالة المفتاح" });
+    },
+    onError: () => {
+      toast({ title: "فشل تحديث الحالة", variant: "destructive" });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: number) => {
+      await apiRequest("DELETE", `/api/api-keys/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/api-keys"] });
+      toast({ title: "تم حذف المفتاح بنجاح" });
+      setDeleteKeyId(null);
+    },
+    onError: () => {
+      toast({ title: "فشل حذف المفتاح", variant: "destructive" });
+    },
+  });
+
+  function copyKey(value: string) {
+    navigator.clipboard.writeText(value).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
+  const isExpired = (expiryDate: string | null) =>
+    expiryDate ? new Date() > new Date(expiryDate) : false;
+
+  return (
+    <>
+      <Card className="overflow-hidden border-primary/10 shadow-lg hover-elevate transition-all duration-300">
+        <CardHeader className="bg-primary/5 border-b border-primary/10">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-primary text-primary-foreground shadow-sm">
+                <Key className="h-5 w-5" />
+              </div>
+              <div>
+                <CardTitle className="text-xl font-bold">مفاتيح API</CardTitle>
+                <CardDescription>إدارة مفاتيح الوصول البرمجي للنظام.</CardDescription>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              className="gap-2 font-bold"
+              onClick={() => setShowCreateModal(true)}
+              data-testid="btn-create-api-key"
+            >
+              <Plus className="h-4 w-4" />
+              توليد مفتاح جديد
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          {isLoading ? (
+            <div className="p-12 text-center">
+              <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary mb-2" />
+              <p className="text-sm text-muted-foreground">جاري التحميل...</p>
+            </div>
+          ) : keys.length === 0 ? (
+            <div className="p-12 text-center">
+              <Key className="h-12 w-12 mx-auto text-muted mb-4 opacity-20" />
+              <p className="text-muted-foreground font-medium">لا توجد مفاتيح API حتى الآن.</p>
+              <p className="text-xs text-muted-foreground/70 mt-1">اضغط "توليد مفتاح جديد" لإنشاء أول مفتاح.</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-border">
+              {keys.map((key: any) => {
+                const expired = isExpired(key.expiryDate);
+                return (
+                  <div key={key.id} className="flex items-center justify-between p-4 hover:bg-muted/20 transition-colors gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-sm truncate">{key.description}</span>
+                        {key.isActive && !expired ? (
+                          <Badge className="bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30 text-xs font-bold">فعّال</Badge>
+                        ) : expired ? (
+                          <Badge variant="destructive" className="text-xs font-bold">منتهي الصلاحية</Badge>
+                        ) : (
+                          <Badge variant="secondary" className="text-xs font-bold">معطّل</Badge>
+                        )}
+                      </div>
+                      <div className="font-mono text-xs text-muted-foreground mt-1 truncate max-w-xs" data-testid={`key-value-${key.id}`}>
+                        {key.keyValue}
+                      </div>
+                      <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                        <span className="flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
+                          {format(new Date(key.createdAt), "PPP", { locale: ar })}
+                        </span>
+                        {key.expiryDate && (
+                          <span className={`flex items-center gap-1 ${expired ? "text-destructive font-bold" : ""}`}>
+                            ينتهي: {format(new Date(key.expiryDate), "PPP", { locale: ar })}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className={`gap-1 text-xs font-bold ${key.isActive ? "text-green-600 hover:bg-green-500/10" : "text-muted-foreground hover:bg-muted"}`}
+                        onClick={() => toggleMutation.mutate({ id: key.id, isActive: !key.isActive })}
+                        disabled={toggleMutation.isPending}
+                        data-testid={`btn-toggle-key-${key.id}`}
+                        title={key.isActive ? "تعطيل المفتاح" : "تفعيل المفتاح"}
+                      >
+                        {key.isActive ? <ToggleRight className="h-4 w-4" /> : <ToggleLeft className="h-4 w-4" />}
+                        {key.isActive ? "فعّال" : "معطّل"}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-destructive hover:bg-destructive/10"
+                        onClick={() => setDeleteKeyId(key.id)}
+                        data-testid={`btn-delete-key-${key.id}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="p-4 border-t bg-muted/20">
+            <div className="text-xs text-muted-foreground space-y-1">
+              <p className="font-bold text-foreground/70">كيفية الاستخدام:</p>
+              <code className="block bg-muted px-3 py-2 rounded font-mono text-xs select-all">
+                curl -H "x-api-key: YOUR_KEY" {window.location.origin}/api/v1/employees
+              </code>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Create API Key Modal */}
+      <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
+        <DialogContent className="max-w-md" dir="rtl">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-black flex items-center gap-2">
+              <Key className="h-5 w-5 text-primary" />
+              توليد مفتاح API جديد
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label className="font-bold">الوصف <span className="text-destructive">*</span></Label>
+              <Input
+                placeholder="مثال: نظام التقارير الخارجي"
+                value={form.description}
+                onChange={(e) => setForm({ ...form, description: e.target.value })}
+                data-testid="input-api-key-description"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="font-bold">تاريخ الانتهاء <span className="text-muted-foreground text-xs font-normal">(اختياري)</span></Label>
+              <Input
+                type="datetime-local"
+                value={form.expiryDate}
+                onChange={(e) => setForm({ ...form, expiryDate: e.target.value })}
+                data-testid="input-api-key-expiry"
+              />
+              <p className="text-xs text-muted-foreground">اتركه فارغاً للمفتاح الدائم.</p>
+            </div>
+            <div className="p-3 rounded-lg bg-amber-500/5 border border-amber-500/15 text-xs text-amber-700 dark:text-amber-400 flex gap-2">
+              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+              <span>سيُعرض المفتاح <strong>مرة واحدة فقط</strong> بعد الإنشاء. احفظه في مكان آمن.</span>
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setShowCreateModal(false)} className="font-bold">إلغاء</Button>
+            <Button
+              onClick={() => createMutation.mutate({ description: form.description, expiryDate: form.expiryDate || undefined })}
+              disabled={createMutation.isPending || !form.description.trim()}
+              className="gap-2 font-bold"
+              data-testid="btn-confirm-create-api-key"
+            >
+              {createMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Key className="h-4 w-4" />}
+              توليد المفتاح
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* New Key Reveal Modal */}
+      <Dialog open={!!newKey} onOpenChange={(open) => !open && setNewKey(null)}>
+        <DialogContent className="max-w-md" dir="rtl">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-black flex items-center gap-2 text-green-600">
+              <CheckCircle2 className="h-5 w-5" />
+              تم إنشاء المفتاح بنجاح
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="p-3 rounded-lg bg-destructive/5 border border-destructive/20 text-xs text-destructive flex gap-2">
+              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+              <span>هذا المفتاح لن يظهر مجدداً. انسخه الآن واحفظه في مكان آمن.</span>
+            </div>
+            <div className="space-y-2">
+              <Label className="font-bold text-sm">{newKey?.description}</Label>
+              <div className="flex gap-2">
+                <code className="flex-1 block bg-muted px-3 py-3 rounded-lg font-mono text-xs break-all select-all border border-primary/20" data-testid="new-api-key-value">
+                  {newKey?.keyValue}
+                </code>
+              </div>
+              <Button
+                variant="outline"
+                className="w-full gap-2 font-bold border-primary/30 hover:border-primary"
+                onClick={() => newKey && copyKey(newKey.keyValue)}
+                data-testid="btn-copy-api-key"
+              >
+                {copied ? <CheckCircle2 className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+                {copied ? "تم النسخ!" : "نسخ المفتاح"}
+              </Button>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button className="font-bold w-full" onClick={() => setNewKey(null)}>
+              حسناً، تم الحفظ
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={deleteKeyId !== null} onOpenChange={(open) => !open && setDeleteKeyId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <div className="mx-auto w-12 h-12 rounded-full bg-destructive/10 flex items-center justify-center mb-4">
+              <Trash2 className="h-6 w-6 text-destructive" />
+            </div>
+            <AlertDialogTitle className="text-center font-black">تأكيد حذف مفتاح API</AlertDialogTitle>
+            <AlertDialogDescription className="text-center">
+              سيتوقف هذا المفتاح عن العمل فوراً. لا يمكن التراجع عن هذه العملية.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+            <AlertDialogCancel className="font-bold">إلغاء</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90 font-bold"
+              onClick={() => deleteKeyId !== null && deleteMutation.mutate(deleteKeyId)}
+            >
+              حذف المفتاح
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
+}
 
 // Arabic column headers for the Excel template in the same order as the form
 const TEMPLATE_COLUMNS = [
@@ -328,6 +630,9 @@ export default function Settings() {
             إنشاء نسخة احتياطية الآن
           </Button>
         </div>
+
+        {/* API Keys Card - full width */}
+        <ApiKeysCard />
 
         {/* Import Card - full width at top */}
         <ImportEmployeesCard />

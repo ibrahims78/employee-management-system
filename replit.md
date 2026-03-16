@@ -97,6 +97,33 @@ The project follows a monorepo pattern with three main directories:
 - **@replit/vite-plugin-cartographer** — Development tooling (dev only)
 - **@replit/vite-plugin-dev-banner** — Development banner (dev only)
 
+## API Key Management System (March 2026)
+
+Added a full dynamic API key management system:
+
+### New Files
+- **`server/apiKeyAuth.ts`** — `authenticateAPI` middleware that checks `x-api-key` header against the database, validating existence, active status, and expiry. Returns precise Arabic error messages (401) on failure.
+
+### Database
+- **`api_keys` table** — Stores keys with: `key_value` (64-char hex via `crypto.randomBytes(32)`), `description`, `expiry_date`, `is_active`, `created_at`, `created_by`.
+
+### Backend Routes
+- `GET /api/api-keys` — List all keys (masked, admin only)
+- `POST /api/api-keys` — Create new key (generates crypto key server-side, shows full key once)
+- `PATCH /api/api-keys/:id` — Toggle active/inactive or update
+- `DELETE /api/api-keys/:id` — Delete key
+- `POST /api/auth/api-key-login` — Validate API key (for programmatic services)
+- `GET /api/v1/employees` — Example protected route requiring `x-api-key` header
+
+### Frontend
+- **`Settings.tsx`** — New `ApiKeysCard` component with table, create modal, reveal-once dialog, toggle active/inactive, delete confirmation
+- **`Login.tsx`** — Added tab system: "دخول المستخدمين" (username/password) + "مفتاح API" (validate API key for programmatic services)
+
+### Security
+- Keys never logged to console
+- Full key shown only once at creation time; masked in all list views
+- try/catch on all DB operations to prevent server crashes
+
 ## Recent Fixes (March 2026)
 
 ### TypeScript Errors Fixed (0 errors now)

@@ -1,6 +1,6 @@
 import { db } from "./db";
-import { users, employees, auditLogs, settings } from "@shared/schema";
-import type { User, InsertUser, Employee, InsertEmployee, AuditLog, InsertAuditLog } from "@shared/schema";
+import { users, employees, auditLogs, settings, apiKeys } from "@shared/schema";
+import type { User, InsertUser, Employee, InsertEmployee, AuditLog, InsertAuditLog, ApiKey, InsertApiKey } from "@shared/schema";
 import { eq, and, notInArray, desc, inArray, sql, or, ilike } from "drizzle-orm";
 
 export interface IStorage {
@@ -35,6 +35,13 @@ export interface IStorage {
 
   // Backup & Restore
   restoreFromData(data: { employees: any[]; users: any[]; auditLogs: any[] }): Promise<void>;
+
+  // API Keys
+  getApiKeys(): Promise<ApiKey[]>;
+  getApiKeyByValue(keyValue: string): Promise<ApiKey | undefined>;
+  createApiKey(data: InsertApiKey, keyValue: string): Promise<ApiKey>;
+  updateApiKey(id: number, updates: Partial<Pick<ApiKey, "isActive" | "description" | "expiryDate">>): Promise<ApiKey>;
+  deleteApiKey(id: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -277,6 +284,30 @@ export class DatabaseStorage implements IStorage {
 
   async clearAuditLogs(): Promise<void> {
     await db.delete(auditLogs);
+  }
+
+  async getApiKeys(): Promise<ApiKey[]> {
+    return await db.select().from(apiKeys).orderBy(desc(apiKeys.createdAt));
+  }
+
+  async getApiKeyByValue(keyValue: string): Promise<ApiKey | undefined> {
+    const [key] = await db.select().from(apiKeys).where(eq(apiKeys.keyValue, keyValue));
+    return key;
+  }
+
+  async createApiKey(data: InsertApiKey, keyValue: string): Promise<ApiKey> {
+    const [created] = await db.insert(apiKeys).values({ ...data, keyValue }).returning();
+    return created;
+  }
+
+  async updateApiKey(id: number, updates: Partial<Pick<ApiKey, "isActive" | "description" | "expiryDate">>): Promise<ApiKey> {
+    const [updated] = await db.update(apiKeys).set(updates).where(eq(apiKeys.id, id)).returning();
+    if (!updated) throw new Error("API key not found");
+    return updated;
+  }
+
+  async deleteApiKey(id: number): Promise<void> {
+    await db.delete(apiKeys).where(eq(apiKeys.id, id));
   }
 }
 

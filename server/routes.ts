@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { api } from "@shared/routes";
 import { setupAuth, hashPassword } from "./auth";
+import { authenticateAPI } from "./apiKeyAuth";
 import passport from "passport";
 import { z } from "zod";
 import multer from "multer";
@@ -13,6 +14,7 @@ import isIP from "validator/lib/isIP";
 import rateLimit from "express-rate-limit";
 import { format } from "date-fns";
 import * as XLSX from "xlsx";
+import { randomBytes } from "crypto";
 
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -965,6 +967,118 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.json({ message: "تم حذف النسخة الاحتياطية بنجاح" });
     } catch (error) {
       res.status(404).json({ message: "النسخة الاحتياطية غير موجودة" });
+    }
+  });
+
+  // ─── API Key Auth Login (for programmatic services) ───────────────────────
+  app.post("/api/auth/api-key-login", authenticateAPI, (req, res) => {
+    res.json({ success: true, message: "مفتاح API صالح وفعّال." });
+  });
+
+  // ─── API Key Management Routes (Admin only) ────────────────────────────────
+  app.get("/api/api-keys", async (req, res) => {
+    if (req.user?.role !== "admin") {
+      return res.status(403).json({ message: "الوصول مقيد للمدير فقط" });
+    }
+    try {
+      const keys = await storage.getApiKeys();
+      // Never expose the actual key value in list — mask it
+      const masked = keys.map((k) => ({
+        ...k,
+        keyValue: `${k.keyValue.slice(0, 8)}${"•".repeat(24)}${k.keyValue.slice(-8)}`,
+      }));
+      res.json(masked);
+    } catch (err) {
+      res.status(500).json({ message: "خطأ أثناء جلب مفاتيح API" });
+    }
+  });
+
+  app.post("/api/api-keys", async (req, res) => {
+    if (req.user?.role !== "admin") {
+      return res.status(403).json({ message: "الوصول مقيد للمدير فقط" });
+    }
+    try {
+      const { description, expiryDate } = req.body;
+      if (!description || !description.trim()) {
+        return res.status(400).json({ message: "الوصف مطلوب" });
+      }
+      const keyValue = randomBytes(32).toString("hex");
+      const created = await storage.createApiKey(
+        {
+          description: description.trim(),
+          expiryDate: expiryDate ? new Date(expiryDate) : null,
+          isActive: true,
+          createdBy: req.user.id,
+        },
+        keyValue,
+      );
+      await storage.createAuditLog({
+        userId: req.user.id,
+        action: "CREATE",
+        entityType: "API_KEY",
+        entityId: String(created.id),
+        newValues: { description: created.description },
+      });
+      res.status(201).json({ ...created, keyValue });
+    } catch (err) {
+      res.status(500).json({ message: "خطأ أثناء إنشاء مفتاح API" });
+    }
+  });
+
+  app.patch("/api/api-keys/:id", async (req, res) => {
+    if (req.user?.role !== "admin") {
+      return res.status(403).json({ message: "الوصول مقيد للمدير فقط" });
+    }
+    try {
+      const id = Number(req.params.id);
+      const { isActive, description, expiryDate } = req.body;
+      const updates: any = {};
+      if (isActive !== undefined) updates.isActive = isActive;
+      if (description !== undefined) updates.description = description;
+      if (expiryDate !== undefined) updates.expiryDate = expiryDate ? new Date(expiryDate) : null;
+      const updated = await storage.updateApiKey(id, updates);
+      await storage.createAuditLog({
+        userId: req.user.id,
+        action: "UPDATE",
+        entityType: "API_KEY",
+        entityId: String(id),
+        newValues: updates,
+      });
+      res.json({
+        ...updated,
+        keyValue: `${updated.keyValue.slice(0, 8)}${"•".repeat(24)}${updated.keyValue.slice(-8)}`,
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "خطأ أثناء تحديث مفتاح API" });
+    }
+  });
+
+  app.delete("/api/api-keys/:id", async (req, res) => {
+    if (req.user?.role !== "admin") {
+      return res.status(403).json({ message: "الوصول مقيد للمدير فقط" });
+    }
+    try {
+      const id = Number(req.params.id);
+      await storage.deleteApiKey(id);
+      await storage.createAuditLog({
+        userId: req.user.id,
+        action: "DELETE",
+        entityType: "API_KEY",
+        entityId: String(id),
+      });
+      res.status(204).end();
+    } catch (err) {
+      res.status(500).json({ message: "خطأ أثناء حذف مفتاح API" });
+    }
+  });
+
+  // Example protected route via API key (for external services)
+  app.get("/api/v1/employees", authenticateAPI, async (req, res) => {
+    try {
+      const employees = await storage.getEmployees(false, 1, 100, false, true);
+      res.json(employees);
+    } catch (err) {
+      res.status(500).json({ message: "خطأ في جلب بيانات الموظفين" });
     }
   });
 
