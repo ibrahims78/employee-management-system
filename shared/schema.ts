@@ -134,6 +134,20 @@ export type InsertEmployee = z.infer<typeof insertEmployeeSchema>;
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
 
+export const botUsers = pgTable("bot_users", {
+  id: serial("id").primaryKey(),
+  fullName: text("full_name").notNull(),
+  phoneNumber: text("phone_number").notNull().unique(),
+  activationCode: text("activation_code").notNull(),
+  deactivationCode: text("deactivation_code").notNull(),
+  isBotActive: boolean("is_bot_active").notNull().default(false),
+  lastInteraction: timestamp("last_interaction"),
+});
+
+export const insertBotUserSchema = createInsertSchema(botUsers).omit({ id: true });
+export type BotUser = typeof botUsers.$inferSelect;
+export type InsertBotUser = z.infer<typeof insertBotUserSchema>;
+
 // API Request Types
 export type LoginRequest = Pick<InsertUser, "username" | "password">;
 export type UpdateEmployeeRequest = Partial<InsertEmployee>;

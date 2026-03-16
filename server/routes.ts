@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { api } from "@shared/routes";
 import { setupAuth, hashPassword } from "./auth";
-import { authenticateAPI } from "./apiKeyAuth";
+import { authenticateAPI, authenticateMachineAPI } from "./apiKeyAuth";
 import passport from "passport";
 import { z } from "zod";
 import multer from "multer";
@@ -1125,6 +1125,234 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.status(500).json({ message: "خطأ في جلب بيانات الموظفين" });
     }
   });
+
+  // ─── Phone Number Normalization ────────────────────────────────────────────
+  function normalizePhone(raw: string): string {
+    // Strip everything except digits
+    let digits = raw.replace(/\D/g, "");
+    // Remove leading zeros
+    digits = digits.replace(/^0+/, "");
+    return digits;
+  }
+
+  // ─── Bot Users Admin CRUD (session-authenticated) ─────────────────────────
+  app.get("/api/bot-users", async (req, res) => {
+    try {
+      const users = await storage.getBotUsers();
+      res.json(users);
+    } catch (err) {
+      res.status(500).json({ message: "خطأ في جلب مستخدمي البوت" });
+    }
+  });
+
+  app.post("/api/bot-users", async (req, res) => {
+    try {
+      const { fullName, phoneNumber, activationCode, deactivationCode } = req.body;
+      if (!fullName || !phoneNumber || !activationCode || !deactivationCode) {
+        return res.status(400).json({ message: "جميع الحقول مطلوبة" });
+      }
+      const normalizedPhone = normalizePhone(String(phoneNumber));
+      if (!normalizedPhone) {
+        return res.status(400).json({ message: "رقم الهاتف غير صالح" });
+      }
+      const botUser = await storage.createBotUser({
+        fullName: String(fullName).trim(),
+        phoneNumber: normalizedPhone,
+        activationCode: String(activationCode).trim(),
+        deactivationCode: String(deactivationCode).trim(),
+        isBotActive: false,
+        lastInteraction: null,
+      });
+      if (req.user) {
+        await storage.createAuditLog({
+          userId: req.user.id,
+          action: "CREATE",
+          entityType: "BOT_USER",
+          entityId: String(botUser.id),
+          newValues: { fullName: botUser.fullName, phoneNumber: botUser.phoneNumber },
+        });
+      }
+      res.status(201).json(botUser);
+    } catch (err: any) {
+      if (err.message?.includes("unique")) {
+        return res.status(409).json({ message: "رقم الهاتف مسجل مسبقاً" });
+      }
+      res.status(500).json({ message: "خطأ في إنشاء مستخدم البوت" });
+    }
+  });
+
+  app.patch("/api/bot-users/:id", async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const { fullName, phoneNumber, activationCode, deactivationCode, isBotActive } = req.body;
+      const updates: any = {};
+      if (fullName !== undefined) updates.fullName = String(fullName).trim();
+      if (phoneNumber !== undefined) updates.phoneNumber = normalizePhone(String(phoneNumber));
+      if (activationCode !== undefined) updates.activationCode = String(activationCode).trim();
+      if (deactivationCode !== undefined) updates.deactivationCode = String(deactivationCode).trim();
+      if (isBotActive !== undefined) updates.isBotActive = Boolean(isBotActive);
+      const old = await storage.getBotUser(id);
+      const updated = await storage.updateBotUser(id, updates);
+      if (req.user) {
+        await storage.createAuditLog({
+          userId: req.user.id,
+          action: "UPDATE",
+          entityType: "BOT_USER",
+          entityId: String(id),
+          oldValues: old,
+          newValues: updates,
+        });
+      }
+      res.json(updated);
+    } catch (err: any) {
+      if (err.message?.includes("unique")) {
+        return res.status(409).json({ message: "رقم الهاتف مسجل مسبقاً" });
+      }
+      res.status(500).json({ message: err.message || "خطأ في تحديث مستخدم البوت" });
+    }
+  });
+
+  app.delete("/api/bot-users/:id", async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const old = await storage.getBotUser(id);
+      await storage.deleteBotUser(id);
+      if (req.user && old) {
+        await storage.createAuditLog({
+          userId: req.user.id,
+          action: "DELETE",
+          entityType: "BOT_USER",
+          entityId: String(id),
+          oldValues: { fullName: old.fullName, phoneNumber: old.phoneNumber },
+        });
+      }
+      res.status(204).end();
+    } catch (err) {
+      res.status(500).json({ message: "خطأ في حذف مستخدم البوت" });
+    }
+  });
+
+  // ─── Bot API Endpoints (machine API key required) ─────────────────────────
+
+  // POST /api/v1/bot/check-auth
+  app.post("/api/v1/bot/check-auth", authenticateMachineAPI, async (req, res) => {
+    try {
+      const { phoneNumber } = req.body;
+      if (!phoneNumber) {
+        return res.status(400).json({ authorized: false, message: "رقم الهاتف مطلوب" });
+      }
+      const normalized = normalizePhone(String(phoneNumber));
+      const botUser = await storage.getBotUserByPhone(normalized);
+
+      if (!botUser) {
+        return res.json({ authorized: false, message: "الرقم غير مسجل في النظام" });
+      }
+
+      // Check if employee has documents
+      const allEmployees = await storage.getEmployees(false, 1, 10000, false, true);
+      const matchedEmployee = allEmployees.find(
+        (e) => e.mobile && normalizePhone(e.mobile) === normalized
+      );
+      const hasDocs = matchedEmployee
+        ? Array.isArray(matchedEmployee.documentPaths) && (matchedEmployee.documentPaths as string[]).length > 0
+        : false;
+
+      res.json({
+        authorized: true,
+        full_name: botUser.fullName,
+        phone_number: botUser.phoneNumber,
+        is_bot_active: botUser.isBotActive,
+        activation_code: botUser.activationCode,
+        deactivation_code: botUser.deactivationCode,
+        has_documents: hasDocs,
+        last_interaction: botUser.lastInteraction,
+      });
+    } catch (err) {
+      res.status(500).json({ authorized: false, message: "خطأ في التحقق من الصلاحية" });
+    }
+  });
+
+  // POST /api/v1/bot/update-status
+  app.post("/api/v1/bot/update-status", authenticateMachineAPI, async (req, res) => {
+    try {
+      const { phoneNumber, isActive } = req.body;
+      if (!phoneNumber || isActive === undefined) {
+        return res.status(400).json({ success: false, message: "رقم الهاتف وحالة النشاط مطلوبان" });
+      }
+      const normalized = normalizePhone(String(phoneNumber));
+      const botUser = await storage.getBotUserByPhone(normalized);
+      if (!botUser) {
+        return res.status(404).json({ success: false, message: "المستخدم غير موجود" });
+      }
+      const updated = await storage.updateBotUser(botUser.id, {
+        isBotActive: Boolean(isActive),
+        lastInteraction: new Date(),
+      });
+      res.json({ success: true, is_bot_active: updated.isBotActive, last_interaction: updated.lastInteraction });
+    } catch (err) {
+      res.status(500).json({ success: false, message: "خطأ في تحديث الحالة" });
+    }
+  });
+
+  // POST /api/v1/bot/get-docs
+  app.post("/api/v1/bot/get-docs", authenticateMachineAPI, async (req, res) => {
+    try {
+      const { phoneNumber } = req.body;
+      if (!phoneNumber) {
+        return res.status(400).json({ success: false, message: "رقم الهاتف مطلوب" });
+      }
+      const normalized = normalizePhone(String(phoneNumber));
+
+      // Find employee by mobile number
+      const allEmployees = await storage.getEmployees(false, 1, 10000, false, true);
+      const employee = allEmployees.find(
+        (e) => e.mobile && normalizePhone(e.mobile) === normalized
+      );
+
+      if (!employee) {
+        return res.json({ success: true, documents: [], message: "لا يوجد موظف مرتبط بهذا الرقم" });
+      }
+
+      const docPaths = (employee.documentPaths as string[]) || [];
+      if (docPaths.length === 0) {
+        return res.json({ success: true, documents: [], message: "لا توجد مستندات مرفوعة لهذا الموظف" });
+      }
+
+      // Build download URLs
+      const protocol = req.protocol;
+      const host = req.get("host") || "localhost";
+      const baseUrl = `${protocol}://${host}`;
+
+      const documents = docPaths.map((docPath) => {
+        const fileName = path.basename(docPath);
+        const downloadUrl = `${baseUrl}${docPath}`;
+        return { name: fileName, url: downloadUrl, path: docPath };
+      });
+
+      // Update bot user last interaction
+      const botUser = await storage.getBotUserByPhone(normalized);
+      if (botUser) {
+        await storage.updateBotUser(botUser.id, { lastInteraction: new Date() });
+      }
+
+      res.json({ success: true, employee_name: employee.fullName, documents });
+    } catch (err) {
+      res.status(500).json({ success: false, message: "خطأ في جلب المستندات" });
+    }
+  });
+
+  // ─── Background Cron: Deactivate inactive bot sessions every 60 seconds ───
+  const INACTIVITY_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes
+  setInterval(async () => {
+    try {
+      const count = await storage.deactivateInactiveBotUsers(INACTIVITY_THRESHOLD_MS);
+      if (count > 0) {
+        console.log(`[Bot Cron] Deactivated ${count} inactive bot session(s).`);
+      }
+    } catch (err) {
+      console.error("[Bot Cron] Error deactivating inactive sessions:", err);
+    }
+  }, 60 * 1000);
 
   return httpServer;
 }

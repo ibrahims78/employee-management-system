@@ -1,42 +1,43 @@
 import { useState } from "react";
 import { useUsers } from "@/hooks/use-users";
+import { useBotUsers } from "@/hooks/use-bot-users";
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Trash2, Pencil, ShieldAlert } from "lucide-react";
+import { Plus, Trash2, Pencil, Bot, Users as UsersIcon, Phone, Key, FileText, Eye, X, RefreshCw } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { insertUserSchema, type InsertUser, type User } from "@shared/schema";
+import { insertUserSchema, insertBotUserSchema, type InsertUser, type User, type BotUser, type InsertBotUser } from "@shared/schema";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
+import { z } from "zod";
+import { useQuery } from "@tanstack/react-query";
+import type { Employee } from "@shared/schema";
 
-function UserFormDialog({ 
-  open, 
-  onOpenChange, 
-  user 
-}: { 
-  open: boolean; 
+// ─── System User Form ────────────────────────────────────────────────────────
+
+function UserFormDialog({
+  open,
+  onOpenChange,
+  user,
+}: {
+  open: boolean;
   onOpenChange: (open: boolean) => void;
   user?: User;
 }) {
   const { createUser, updateUser, isCreating, isUpdating } = useUsers();
-  
+
   const form = useForm<InsertUser>({
     resolver: zodResolver(insertUserSchema),
-    defaultValues: user ? {
-      username: user.username,
-      password: user.password,
-      role: user.role,
-    } : {
-      username: "",
-      password: "",
-      role: "employee",
-    }
+    defaultValues: user
+      ? { username: user.username, password: user.password, role: user.role }
+      : { username: "", password: "", role: "employee" },
   });
 
   function onSubmit(data: InsertUser) {
@@ -58,17 +59,28 @@ function UserFormDialog({
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <FormField control={form.control} name="username" render={({ field }) => (
-              <FormItem><FormLabel>اسم المستخدم</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+              <FormItem><FormLabel>اسم المستخدم</FormLabel><FormControl><Input data-testid="input-username" {...field} /></FormControl><FormMessage /></FormItem>
             )} />
             <FormField control={form.control} name="password" render={({ field }) => (
-              <FormItem><FormLabel>كلمة المرور</FormLabel><FormControl><Input type="password" {...field} /></FormControl><FormMessage /></FormItem>
+              <FormItem><FormLabel>كلمة المرور</FormLabel><FormControl><Input data-testid="input-password" type="password" {...field} /></FormControl><FormMessage /></FormItem>
             )} />
             <FormField control={form.control} name="role" render={({ field }) => (
-              <FormItem><FormLabel>الصلاحية</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent><SelectItem value="admin">مدير</SelectItem><SelectItem value="employee">موظف</SelectItem></SelectContent></Select><FormMessage /></FormItem>
+              <FormItem><FormLabel>الصلاحية</FormLabel>
+                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <FormControl><SelectTrigger data-testid="select-role"><SelectValue /></SelectTrigger></FormControl>
+                  <SelectContent>
+                    <SelectItem value="admin">مدير</SelectItem>
+                    <SelectItem value="employee">موظف</SelectItem>
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
             )} />
             <div className="flex justify-end gap-2 pt-4">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>إلغاء</Button>
-              <Button type="submit" disabled={isPending}>{isPending ? "جاري الحفظ..." : "حفظ"}</Button>
+              <Button data-testid="button-submit-user" type="submit" disabled={isPending}>
+                {isPending ? "جاري الحفظ..." : "حفظ"}
+              </Button>
             </div>
           </form>
         </Form>
@@ -77,99 +89,515 @@ function UserFormDialog({
   );
 }
 
+// ─── Bot User Form ────────────────────────────────────────────────────────────
+
+const botUserFormSchema = insertBotUserSchema.extend({
+  fullName: z.string().min(2, "الاسم مطلوب"),
+  phoneNumber: z.string().min(7, "رقم الهاتف غير صالح"),
+  activationCode: z.string().min(1, "كود التفعيل مطلوب"),
+  deactivationCode: z.string().min(1, "كود إلغاء التفعيل مطلوب"),
+});
+
+type BotUserFormValues = z.infer<typeof botUserFormSchema>;
+
+function BotUserFormDialog({
+  open,
+  onOpenChange,
+  botUser,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  botUser?: BotUser;
+}) {
+  const { createBotUser, updateBotUser, isCreating, isUpdating } = useBotUsers();
+
+  const form = useForm<BotUserFormValues>({
+    resolver: zodResolver(botUserFormSchema),
+    defaultValues: botUser
+      ? {
+          fullName: botUser.fullName,
+          phoneNumber: botUser.phoneNumber,
+          activationCode: botUser.activationCode,
+          deactivationCode: botUser.deactivationCode,
+          isBotActive: botUser.isBotActive,
+          lastInteraction: botUser.lastInteraction,
+        }
+      : {
+          fullName: "",
+          phoneNumber: "",
+          activationCode: "",
+          deactivationCode: "",
+          isBotActive: false,
+          lastInteraction: null,
+        },
+  });
+
+  function onSubmit(data: BotUserFormValues) {
+    if (botUser) {
+      updateBotUser(
+        {
+          id: botUser.id,
+          data: {
+            fullName: data.fullName,
+            phoneNumber: data.phoneNumber,
+            activationCode: data.activationCode,
+            deactivationCode: data.deactivationCode,
+          },
+        },
+        { onSuccess: () => onOpenChange(false) }
+      );
+    } else {
+      createBotUser(
+        {
+          fullName: data.fullName,
+          phoneNumber: data.phoneNumber,
+          activationCode: data.activationCode,
+          deactivationCode: data.deactivationCode,
+        },
+        { onSuccess: () => onOpenChange(false) }
+      );
+    }
+  }
+
+  const isPending = isCreating || isUpdating;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="w-[95vw] max-w-lg rounded-xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Bot className="h-5 w-5 text-primary" />
+            {botUser ? "تعديل بيانات مستخدم البوت" : "إضافة مستخدم بوت جديد"}
+          </DialogTitle>
+        </DialogHeader>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <FormField control={form.control} name="fullName" render={({ field }) => (
+              <FormItem>
+                <FormLabel>اسم الموظف الكامل</FormLabel>
+                <FormControl>
+                  <Input data-testid="input-bot-fullname" placeholder="محمد أحمد الخطيب" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )} />
+            <FormField control={form.control} name="phoneNumber" render={({ field }) => (
+              <FormItem>
+                <FormLabel>رقم الهاتف (الصيغة الدولية)</FormLabel>
+                <FormControl>
+                  <Input data-testid="input-bot-phone" placeholder="963912345678" dir="ltr" {...field} />
+                </FormControl>
+                <p className="text-[11px] text-muted-foreground">أدخل الرقم بالصيغة الدولية بدون + أو أصفار مثل: 963912345678</p>
+                <FormMessage />
+              </FormItem>
+            )} />
+            <div className="grid grid-cols-2 gap-3">
+              <FormField control={form.control} name="activationCode" render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="flex items-center gap-1"><Key className="h-3 w-3 text-green-600" />كود التفعيل</FormLabel>
+                  <FormControl>
+                    <Input data-testid="input-activation-code" placeholder="تفعيل" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="deactivationCode" render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="flex items-center gap-1"><Key className="h-3 w-3 text-red-600" />كود إلغاء التفعيل</FormLabel>
+                  <FormControl>
+                    <Input data-testid="input-deactivation-code" placeholder="إيقاف" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+            </div>
+            <div className="flex justify-end gap-2 pt-4">
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>إلغاء</Button>
+              <Button data-testid="button-submit-bot-user" type="submit" disabled={isPending}>
+                {isPending ? "جاري الحفظ..." : "حفظ"}
+              </Button>
+            </div>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Document Viewer Dialog ───────────────────────────────────────────────────
+
+function EmployeeDocsDialog({
+  phoneNumber,
+  open,
+  onOpenChange,
+}: {
+  phoneNumber: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const { data: employees = [] } = useQuery<Employee[]>({
+    queryKey: ["/api/employees", "allStatuses"],
+    queryFn: async () => {
+      const res = await fetch("/api/employees?allStatuses=true");
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    enabled: open,
+  });
+
+  function normalizePhone(raw: string) {
+    return raw.replace(/\D/g, "").replace(/^0+/, "");
+  }
+
+  const matched = employees.find(
+    (e) => e.mobile && normalizePhone(e.mobile) === normalizePhone(phoneNumber)
+  );
+  const docs = matched ? ((matched.documentPaths as string[]) || []) : [];
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="w-[95vw] max-w-lg rounded-xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <FileText className="h-5 w-5 text-primary" />
+            مستندات الموظف المرتبط بهذا الرقم
+          </DialogTitle>
+        </DialogHeader>
+        {!matched ? (
+          <div className="py-8 text-center text-muted-foreground text-sm">
+            لا يوجد موظف مرتبط بالرقم {phoneNumber} في قاعدة البيانات
+          </div>
+        ) : docs.length === 0 ? (
+          <div className="py-8 text-center">
+            <FileText className="h-10 w-10 mx-auto mb-2 text-muted-foreground/40" />
+            <p className="text-sm text-muted-foreground">لا توجد مستندات مرفوعة للموظف <strong>{matched.fullName}</strong></p>
+          </div>
+        ) : (
+          <div className="space-y-2 max-h-64 overflow-y-auto">
+            <p className="text-sm text-muted-foreground mb-3">موظف: <strong>{matched.fullName}</strong> — {docs.length} ملف</p>
+            {docs.map((docPath, idx) => {
+              const fileName = docPath.split("/").pop() || docPath;
+              const isImage = /\.(jpg|jpeg|png)$/i.test(fileName);
+              const isPdf = /\.pdf$/i.test(fileName);
+              return (
+                <div
+                  key={idx}
+                  data-testid={`doc-item-${idx}`}
+                  className="flex items-center gap-3 rounded-lg border bg-muted/30 px-3 py-2"
+                >
+                  <div className={cn(
+                    "flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-xs font-bold",
+                    isPdf ? "bg-red-100 text-red-700" : isImage ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-700"
+                  )}>
+                    {isPdf ? "PDF" : isImage ? "IMG" : "DOC"}
+                  </div>
+                  <span className="flex-1 truncate text-xs text-foreground" title={fileName}>{fileName}</span>
+                  <a
+                    href={docPath}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    data-testid={`link-doc-${idx}`}
+                    className="shrink-0"
+                  >
+                    <Button variant="ghost" size="icon" className="h-7 w-7">
+                      <Eye className="h-3.5 w-3.5" />
+                    </Button>
+                  </a>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Main Users Page ──────────────────────────────────────────────────────────
+
 export default function UsersPage() {
-  const { users, isLoading, deleteUser } = useUsers();
-  const [isAddOpen, setIsAddOpen] = useState(false);
+  const { users, isLoading: usersLoading, deleteUser } = useUsers();
+  const { botUsers, isLoading: botUsersLoading, deleteBotUser, updateBotUser } = useBotUsers();
+
+  const [isAddUserOpen, setIsAddUserOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | undefined>(undefined);
+
+  const [isAddBotOpen, setIsAddBotOpen] = useState(false);
+  const [editingBotUser, setEditingBotUser] = useState<BotUser | undefined>(undefined);
+  const [docsPhone, setDocsPhone] = useState<string | null>(null);
+
+  const isLoading = usersLoading || botUsersLoading;
 
   if (isLoading) return <Layout><div className="p-8 text-center">جاري التحميل...</div></Layout>;
 
   return (
     <Layout>
-      <div className="mb-6 flex justify-between items-center">
-        <div>
-           <h1 className="text-3xl font-bold text-foreground">إدارة المستخدمين</h1>
-           <p className="mt-2 text-muted-foreground">إضافة وحذف المستخدمين وتحديد صلاحياتهم</p>
-        </div>
-        <Button onClick={() => { setEditingUser(undefined); setIsAddOpen(true); }} className="gap-2">
-          <Plus className="h-4 w-4" />
-          إضافة مستخدم
-        </Button>
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold text-foreground">إدارة المستخدمين</h1>
+        <p className="mt-1 text-muted-foreground">إدارة مستخدمي النظام ومستخدمي بوت الواتساب</p>
       </div>
 
-      <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow className="bg-muted/50">
-              <TableHead className="text-right">اسم المستخدم</TableHead>
-              <TableHead className="text-right">الدور</TableHead>
-              <TableHead className="text-right">الحالة</TableHead>
-              <TableHead className="text-center">إجراءات</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {users.map((user) => (
-              <TableRow key={user.id}>
-                <TableCell className="font-medium">{user.username}</TableCell>
-                <TableCell>
-                  <Badge variant={user.role === 'admin' ? 'destructive' : 'secondary'}>
-                    {user.role === 'admin' ? 'مدير نظام' : 'موظف'}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  <div className="flex items-center gap-2">
-                    <div className={cn(
-                      "h-2 w-2 rounded-full",
-                      user.isOnline ? "bg-green-500 animate-pulse" : "bg-gray-400"
-                    )} />
-                    <span className="text-xs font-medium">
-                      {user.isOnline ? "نشط" : "غير نشط"}
-                    </span>
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <div className="flex justify-center gap-2">
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      onClick={() => { setEditingUser(user); setIsAddOpen(true); }}
-                    >
-                      <Pencil className="h-4 w-4 text-amber-600" />
-                    </Button>
-                    
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button variant="ghost" size="icon" disabled={user.username === 'admin'}>
-                          <Trash2 className="h-4 w-4 text-red-600" />
+      <Tabs defaultValue="system-users">
+        <TabsList className="mb-5 h-10 rounded-lg bg-muted p-1">
+          <TabsTrigger value="system-users" className="flex items-center gap-2 rounded-md text-sm" data-testid="tab-system-users">
+            <UsersIcon className="h-4 w-4" />
+            مستخدمو النظام
+            <Badge variant="secondary" className="ml-1 text-xs">{users.length}</Badge>
+          </TabsTrigger>
+          <TabsTrigger value="bot-users" className="flex items-center gap-2 rounded-md text-sm" data-testid="tab-bot-users">
+            <Bot className="h-4 w-4" />
+            إدارة مستخدمي البوت
+            <Badge variant="secondary" className="ml-1 text-xs">{botUsers.length}</Badge>
+          </TabsTrigger>
+        </TabsList>
+
+        {/* ── System Users Tab ── */}
+        <TabsContent value="system-users">
+          <div className="mb-4 flex justify-end">
+            <Button
+              data-testid="button-add-user"
+              onClick={() => { setEditingUser(undefined); setIsAddUserOpen(true); }}
+              className="gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              إضافة مستخدم
+            </Button>
+          </div>
+          <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/50">
+                  <TableHead className="text-right">اسم المستخدم</TableHead>
+                  <TableHead className="text-right">الدور</TableHead>
+                  <TableHead className="text-right">الحالة</TableHead>
+                  <TableHead className="text-center">إجراءات</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {users.map((user) => (
+                  <TableRow key={user.id} data-testid={`row-user-${user.id}`}>
+                    <TableCell className="font-medium">{user.username}</TableCell>
+                    <TableCell>
+                      <Badge variant={user.role === "admin" ? "destructive" : "secondary"}>
+                        {user.role === "admin" ? "مدير نظام" : "موظف"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <div className={cn(
+                          "h-2 w-2 rounded-full",
+                          user.isOnline ? "bg-green-500 animate-pulse" : "bg-gray-400"
+                        )} />
+                        <span className="text-xs font-medium">{user.isOnline ? "نشط" : "غير نشط"}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex justify-center gap-2">
+                        <Button variant="ghost" size="icon" data-testid={`button-edit-user-${user.id}`}
+                          onClick={() => { setEditingUser(user); setIsAddUserOpen(true); }}>
+                          <Pencil className="h-4 w-4 text-amber-600" />
                         </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>حذف المستخدم</AlertDialogTitle>
-                          <AlertDialogDescription>هل أنت متأكد من حذف هذا المستخدم؟ لا يمكن التراجع عن هذا الإجراء.</AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>إلغاء</AlertDialogCancel>
-                          <AlertDialogAction onClick={() => deleteUser(user.id)} className="bg-destructive" disabled={user.username === 'admin'}>حذف</AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="ghost" size="icon" disabled={user.username === "admin"} data-testid={`button-delete-user-${user.id}`}>
+                              <Trash2 className="h-4 w-4 text-red-600" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>حذف المستخدم</AlertDialogTitle>
+                              <AlertDialogDescription>هل أنت متأكد من حذف هذا المستخدم؟ لا يمكن التراجع.</AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>إلغاء</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => deleteUser(user.id)} className="bg-destructive" disabled={user.username === "admin"}>حذف</AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </TabsContent>
 
-      <UserFormDialog 
-        open={isAddOpen} 
+        {/* ── Bot Users Tab ── */}
+        <TabsContent value="bot-users">
+          <div className="mb-4 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 rounded-lg bg-green-50 dark:bg-green-950/30 px-3 py-1.5 text-xs font-medium text-green-700 dark:text-green-400">
+                <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
+                {botUsers.filter((b) => b.isBotActive).length} نشط الآن
+              </div>
+              <div className="flex items-center gap-1.5 rounded-lg bg-muted px-3 py-1.5 text-xs font-medium text-muted-foreground">
+                {botUsers.filter((b) => !b.isBotActive).length} غير نشط
+              </div>
+            </div>
+            <Button
+              data-testid="button-add-bot-user"
+              onClick={() => { setEditingBotUser(undefined); setIsAddBotOpen(true); }}
+              className="gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              إضافة مستخدم بوت
+            </Button>
+          </div>
+
+          {botUsers.length === 0 ? (
+            <div className="rounded-xl border bg-card shadow-sm py-16 text-center">
+              <Bot className="h-12 w-12 mx-auto mb-3 text-muted-foreground/30" />
+              <p className="text-sm text-muted-foreground">لا يوجد مستخدمون مسجلون في نظام البوت بعد</p>
+              <Button
+                variant="outline"
+                className="mt-4 gap-2"
+                onClick={() => { setEditingBotUser(undefined); setIsAddBotOpen(true); }}
+              >
+                <Plus className="h-4 w-4" />
+                إضافة أول مستخدم
+              </Button>
+            </div>
+          ) : (
+            <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/50">
+                    <TableHead className="text-right">اسم الموظف</TableHead>
+                    <TableHead className="text-right">
+                      <div className="flex items-center gap-1"><Phone className="h-3.5 w-3.5" />رقم الهاتف</div>
+                    </TableHead>
+                    <TableHead className="text-right">حالة البوت</TableHead>
+                    <TableHead className="text-right">آخر تفاعل</TableHead>
+                    <TableHead className="text-right">
+                      <div className="flex items-center gap-1"><Key className="h-3.5 w-3.5" />الأكواد</div>
+                    </TableHead>
+                    <TableHead className="text-center">إجراءات</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {botUsers.map((bu) => (
+                    <TableRow key={bu.id} data-testid={`row-bot-user-${bu.id}`}>
+                      <TableCell className="font-medium">{bu.fullName}</TableCell>
+                      <TableCell>
+                        <span className="font-mono text-xs bg-muted px-2 py-0.5 rounded" dir="ltr">
+                          {bu.phoneNumber}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          data-testid={`status-bot-${bu.id}`}
+                          variant={bu.isBotActive ? "default" : "secondary"}
+                          className={cn(
+                            "gap-1 font-semibold",
+                            bu.isBotActive
+                              ? "bg-green-100 text-green-800 hover:bg-green-100 dark:bg-green-900/40 dark:text-green-400"
+                              : "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400"
+                          )}
+                        >
+                          <span className={cn("h-1.5 w-1.5 rounded-full", bu.isBotActive ? "bg-green-500 animate-pulse" : "bg-gray-400")} />
+                          {bu.isBotActive ? "نشط" : "غير نشط"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {bu.lastInteraction ? (
+                          <span className="text-xs text-muted-foreground">
+                            {new Date(bu.lastInteraction).toLocaleString("ar-SY")}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground/50">لا يوجد</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-[10px] text-muted-foreground">تفعيل: <span className="font-mono font-bold text-green-700 dark:text-green-400">{bu.activationCode}</span></span>
+                          <span className="text-[10px] text-muted-foreground">إيقاف: <span className="font-mono font-bold text-red-700 dark:text-red-400">{bu.deactivationCode}</span></span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex justify-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            data-testid={`button-docs-${bu.id}`}
+                            title="عرض المستندات"
+                            onClick={() => setDocsPhone(bu.phoneNumber)}
+                          >
+                            <FileText className="h-4 w-4 text-blue-600" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            data-testid={`button-toggle-bot-${bu.id}`}
+                            title={bu.isBotActive ? "إيقاف البوت" : "تفعيل البوت"}
+                            onClick={() => updateBotUser({ id: bu.id, data: { isBotActive: !bu.isBotActive } })}
+                          >
+                            <RefreshCw className={cn("h-4 w-4", bu.isBotActive ? "text-orange-500" : "text-green-600")} />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            data-testid={`button-edit-bot-${bu.id}`}
+                            onClick={() => { setEditingBotUser(bu); setIsAddBotOpen(true); }}
+                          >
+                            <Pencil className="h-4 w-4 text-amber-600" />
+                          </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="ghost" size="icon" data-testid={`button-delete-bot-${bu.id}`}>
+                                <Trash2 className="h-4 w-4 text-red-600" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>حذف مستخدم البوت</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  هل أنت متأكد من حذف <strong>{bu.fullName}</strong> من نظام البوت؟ لا يمكن التراجع.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>إلغاء</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => deleteBotUser(bu.id)} className="bg-destructive">حذف</AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
+
+      {/* Dialogs */}
+      <UserFormDialog
+        open={isAddUserOpen}
         onOpenChange={(open) => {
-          setIsAddOpen(open);
+          setIsAddUserOpen(open);
           if (!open) setEditingUser(undefined);
         }}
         user={editingUser}
       />
+
+      <BotUserFormDialog
+        open={isAddBotOpen}
+        onOpenChange={(open) => {
+          setIsAddBotOpen(open);
+          if (!open) setEditingBotUser(undefined);
+        }}
+        botUser={editingBotUser}
+      />
+
+      {docsPhone && (
+        <EmployeeDocsDialog
+          phoneNumber={docsPhone}
+          open={!!docsPhone}
+          onOpenChange={(open) => { if (!open) setDocsPhone(null); }}
+        />
+      )}
     </Layout>
   );
 }

@@ -1,7 +1,7 @@
 import { db } from "./db";
-import { users, employees, auditLogs, settings, apiKeys } from "@shared/schema";
-import type { User, InsertUser, Employee, InsertEmployee, AuditLog, InsertAuditLog, ApiKey, InsertApiKey } from "@shared/schema";
-import { eq, and, notInArray, desc, inArray, sql, or, ilike } from "drizzle-orm";
+import { users, employees, auditLogs, settings, apiKeys, botUsers } from "@shared/schema";
+import type { User, InsertUser, Employee, InsertEmployee, AuditLog, InsertAuditLog, ApiKey, InsertApiKey, BotUser, InsertBotUser } from "@shared/schema";
+import { eq, and, notInArray, desc, inArray, sql, or, ilike, lt } from "drizzle-orm";
 
 export interface IStorage {
   // Users
@@ -42,6 +42,15 @@ export interface IStorage {
   createApiKey(data: InsertApiKey, keyValue: string): Promise<ApiKey>;
   updateApiKey(id: number, updates: Partial<Pick<ApiKey, "isActive" | "description" | "expiryDate" | "keyType">>): Promise<ApiKey>;
   deleteApiKey(id: number): Promise<void>;
+
+  // Bot Users
+  getBotUsers(): Promise<BotUser[]>;
+  getBotUser(id: number): Promise<BotUser | undefined>;
+  getBotUserByPhone(phoneNumber: string): Promise<BotUser | undefined>;
+  createBotUser(data: InsertBotUser): Promise<BotUser>;
+  updateBotUser(id: number, updates: Partial<BotUser>): Promise<BotUser>;
+  deleteBotUser(id: number): Promise<void>;
+  deactivateInactiveBotUsers(thresholdMs: number): Promise<number>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -308,6 +317,50 @@ export class DatabaseStorage implements IStorage {
 
   async deleteApiKey(id: number): Promise<void> {
     await db.delete(apiKeys).where(eq(apiKeys.id, id));
+  }
+
+  async getBotUsers(): Promise<BotUser[]> {
+    return await db.select().from(botUsers).orderBy(desc(botUsers.id));
+  }
+
+  async getBotUser(id: number): Promise<BotUser | undefined> {
+    const [user] = await db.select().from(botUsers).where(eq(botUsers.id, id));
+    return user;
+  }
+
+  async getBotUserByPhone(phoneNumber: string): Promise<BotUser | undefined> {
+    const [user] = await db.select().from(botUsers).where(eq(botUsers.phoneNumber, phoneNumber));
+    return user;
+  }
+
+  async createBotUser(data: InsertBotUser): Promise<BotUser> {
+    const [created] = await db.insert(botUsers).values(data).returning();
+    return created;
+  }
+
+  async updateBotUser(id: number, updates: Partial<BotUser>): Promise<BotUser> {
+    const [updated] = await db.update(botUsers).set(updates).where(eq(botUsers.id, id)).returning();
+    if (!updated) throw new Error("Bot user not found");
+    return updated;
+  }
+
+  async deleteBotUser(id: number): Promise<void> {
+    await db.delete(botUsers).where(eq(botUsers.id, id));
+  }
+
+  async deactivateInactiveBotUsers(thresholdMs: number): Promise<number> {
+    const cutoff = new Date(Date.now() - thresholdMs);
+    const result = await db
+      .update(botUsers)
+      .set({ isBotActive: false })
+      .where(
+        and(
+          eq(botUsers.isBotActive, true),
+          lt(botUsers.lastInteraction, cutoff)
+        )
+      )
+      .returning({ id: botUsers.id });
+    return result.length;
   }
 }
 
