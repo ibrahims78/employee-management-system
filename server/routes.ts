@@ -446,8 +446,23 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(employees);
   });
 
+  app.get('/api/employees/:id/history', async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({ message: "معرّف الموظف غير صالح" });
+    }
+    const employee = await storage.getEmployee(id);
+    if (!employee) return res.status(404).json({ message: "Employee not found" });
+    const history = await storage.getEmployeeHistory(String(id));
+    res.json(history);
+  });
+
   app.get(api.employees.get.path, async (req, res) => {
-    const employee = await storage.getEmployee(Number(req.params.id));
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({ message: "معرّف الموظف غير صالح" });
+    }
+    const employee = await storage.getEmployee(id);
     if (!employee) return res.status(404).json({ message: "Employee not found" });
     res.json(employee);
   });

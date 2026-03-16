@@ -295,6 +295,16 @@ export class DatabaseStorage implements IStorage {
     await db.delete(auditLogs);
   }
 
+  async getEmployeeHistory(employeeId: string): Promise<{ log: AuditLog; user: User | null }[]> {
+    const result = await db
+      .select()
+      .from(auditLogs)
+      .leftJoin(users, eq(auditLogs.userId, users.id))
+      .where(and(eq(auditLogs.entityType, 'EMPLOYEE'), eq(auditLogs.entityId, employeeId)))
+      .orderBy(desc(auditLogs.id));
+    return result.map(l => ({ log: l.audit_logs, user: l.users }));
+  }
+
   async getApiKeys(): Promise<ApiKey[]> {
     return await db.select().from(apiKeys).orderBy(desc(apiKeys.createdAt));
   }
