@@ -190,6 +190,37 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.status(401).send("Unauthorized");
   }, express.static(uploadsDir));
 
+  // Public file-serving route for the bot: /api/v1/files/uploads/...?_t=API_KEY
+  // Allows WhatsApp users to open document links without a browser session.
+  app.get("/api/v1/files/*filePath", authenticateAPI, async (req, res) => {
+    try {
+      const filePath = (req.params as any).filePath as string;
+      if (!filePath) return res.status(400).send("مسار الملف مطلوب");
+
+      // Normalize: remove leading slash, ensure it starts with "uploads/"
+      const normalized = filePath.replace(/^\/+/, "");
+      if (!normalized.startsWith("uploads/")) {
+        return res.status(400).send("مسار غير صالح");
+      }
+
+      const fullPath = path.resolve(process.cwd(), "storage", normalized);
+      const absoluteUploadsDir = path.resolve(process.cwd(), "storage", "uploads");
+
+      // Security: prevent path traversal
+      if (!fullPath.startsWith(absoluteUploadsDir)) {
+        return res.status(403).send("مسار غير مسموح به");
+      }
+
+      const exists = await fs.stat(fullPath).then(() => true).catch(() => false);
+      if (!exists) return res.status(404).send("الملف غير موجود");
+
+      res.sendFile(fullPath);
+    } catch (err) {
+      console.error("[Bot file-serve] Error:", err);
+      res.status(500).send("خطأ في جلب الملف");
+    }
+  });
+
   // Returns whether API key enforcement is active (false when no keys exist yet = bootstrap mode)
   app.get("/api/auth/setup-status", async (_req, res) => {
     try {
@@ -1409,10 +1440,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const protocol = req.protocol;
       const host = req.get("host") || "localhost";
       const baseUrl = `${protocol}://${host}`;
+      const apiToken = (req.query._t as string) || (req.headers["x-api-key"] as string) || "";
 
       const documents = docPaths.map((docPath) => {
         const fileName = path.basename(docPath);
-        const downloadUrl = `${baseUrl}${docPath}`;
+        const cleanPath = docPath.startsWith("/") ? docPath.substring(1) : docPath;
+        const downloadUrl = apiToken
+          ? `${baseUrl}/api/v1/files/${cleanPath}?_t=${apiToken}`
+          : `${baseUrl}${docPath}`;
         return { name: fileName, url: downloadUrl, path: docPath };
       });
 
@@ -1494,6 +1529,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const protocol = req.protocol;
       const host = req.get("host") || "localhost";
       const baseUrl = `${protocol}://${host}`;
+      const botApiToken = (req.query._t as string) || (req.headers["x-api-key"] as string) || "";
       const rawPaths = (employee.documentPaths as string[] | null) ?? [];
       const documents = rawPaths.map((docPath) => {
         const fileName = path.basename(docPath);
@@ -1508,10 +1544,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           xlsx: "Excel",
           xls: "Excel",
         };
+        const cleanPath = docPath.startsWith("/") ? docPath.substring(1) : docPath;
+        const fileUrl = botApiToken
+          ? `${baseUrl}/api/v1/files/${cleanPath}?_t=${botApiToken}`
+          : `${baseUrl}${docPath}`;
         return {
           name: fileName,
           type: typeMap[ext] ?? ext.toUpperCase(),
-          url: `${baseUrl}${docPath}`,
+          url: fileUrl,
           path: docPath,
         };
       });
@@ -1588,6 +1628,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const protocol = req.protocol;
       const host = req.get("host") || "localhost";
       const baseUrl = `${protocol}://${host}`;
+      // Embed the API key in file URLs so WhatsApp users can open them directly
+      const apiKeyToken = (req.query._t as string) || (req.headers["x-api-key"] as string) || "";
 
       const typeMap: Record<string, string> = {
         pdf: "PDF",
@@ -1607,11 +1649,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const documents = rawPaths.map((docPath) => {
           const fileName = path.basename(docPath);
           const ext = path.extname(fileName).toLowerCase().replace(".", "");
+          // Build a bot-accessible URL via /api/v1/files/ with API key embedded
+          const cleanPath = docPath.startsWith("/") ? docPath.substring(1) : docPath;
+          const directUrl = apiKeyToken
+            ? `${baseUrl}/api/v1/files/${cleanPath}?_t=${apiKeyToken}`
+            : `${baseUrl}${docPath}`;
           return {
             file_name: fileName,
             file_type: typeMap[ext] ?? ext.toUpperCase(),
             file_path: docPath,
-            direct_url: `${baseUrl}${docPath}`,
+            direct_url: directUrl,
           };
         });
 
