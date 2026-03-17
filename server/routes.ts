@@ -1661,7 +1661,39 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         };
       });
 
-      // ── 2. All bot users ─────────────────────────────────────────────────
+      // ── 2. Pre-computed statistics (so the LLM never has to count manually) ──
+      const statusCounts: Record<string, number> = {};
+      const employmentCounts: Record<string, number> = {};
+      const departmentCounts: Record<string, number> = {};
+      const genderCounts: Record<string, number> = {};
+      const certTypeCounts: Record<string, number> = {};
+      const jobTitleCounts: Record<string, number> = {};
+      let withDocuments = 0;
+      let withoutDocuments = 0;
+
+      for (const emp of employees_data) {
+        statusCounts[emp.current_status] = (statusCounts[emp.current_status] || 0) + 1;
+        employmentCounts[emp.employment_status] = (employmentCounts[emp.employment_status] || 0) + 1;
+        departmentCounts[emp.department] = (departmentCounts[emp.department] || 0) + 1;
+        genderCounts[emp.gender] = (genderCounts[emp.gender] || 0) + 1;
+        certTypeCounts[emp.certificate_type] = (certTypeCounts[emp.certificate_type] || 0) + 1;
+        jobTitleCounts[emp.job_title] = (jobTitleCounts[emp.job_title] || 0) + 1;
+        if (emp.total_documents > 0) withDocuments++; else withoutDocuments++;
+      }
+
+      const statistics = {
+        total_employees: employees_data.length,
+        by_current_status: statusCounts,
+        by_employment_status: employmentCounts,
+        by_department: departmentCounts,
+        by_gender: genderCounts,
+        by_certificate_type: certTypeCounts,
+        by_job_title: jobTitleCounts,
+        with_documents: withDocuments,
+        without_documents: withoutDocuments,
+      };
+
+      // ── 3. All bot users ─────────────────────────────────────────────────
       const allBotUsers = await storage.getBotUsers();
       const bot_users_data = allBotUsers.map((bu) => ({
         id: bu.id,
@@ -1690,6 +1722,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           total_bot_users: bot_users_data.length,
           total_settings: settings_data.length,
         },
+        statistics,
         data: {
           employees: employees_data,
           bot_users: bot_users_data,
