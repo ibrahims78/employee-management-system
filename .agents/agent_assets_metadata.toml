@@ -36,3 +36,9 @@ id = "dKQiXoDgSvghTIQf92iKb"
 uri = "file://attached_assets/Sidawi_AI_Health_V12_Ready.json"
 type = "unspecified"
 title = "Sidawi_AI_Health_V12_Ready.json — جاهز للاستيراد"
+
+[[outputs]]
+id = "O2e2XDfJgC2QoEkMDveE3"
+uri = "file://attached_assets/Sidawi_AI_Health_V13_Final.json"
+type = "unspecified"
+title = "Sidawi_AI_Health_V13_Final.json — نسخة نهائية جاهزة"

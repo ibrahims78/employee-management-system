@@ -1439,27 +1439,35 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         });
       }
 
-      const normalized = normalizePhone(String(phoneNumber));
+      const rawInput = String(phoneNumber).trim();
+      const normalized = normalizePhone(rawInput);
 
-      // 1 ─ Verify bot user exists and session is active
-      const botUser = await storage.getBotUserByPhone(normalized);
+      // 1 ─ Locate bot user: try by stored phone first, then by WhatsApp LID
+      let botUser = await storage.getBotUserByPhone(normalized);
+      if (!botUser) {
+        // WhatsApp sends LID (e.g. "72087234449573@lid") as the "from" field —
+        // fall back to a LID lookup so the tool works regardless of input format.
+        botUser = await storage.getBotUserByLid(rawInput);
+      }
+
       if (!botUser) {
         return res.status(404).json({
           status: "error",
-          message: "لا يوجد مستخدم بوت مسجل بهذا الرقم",
+          message: "لا يوجد مستخدم بوت مسجل بهذا الرقم أو المعرّف",
         });
       }
 
       if (!botUser.isBotActive) {
         return res.status(403).json({
           status: "error",
-          message: "جلسة البوت غير نشطة لهذا الرقم. يجب تفعيل الجلسة أولاً.",
+          message: "جلسة البوت غير نشطة. يجب تفعيل الجلسة أولاً.",
           is_active: false,
         });
       }
 
-      // 2 ─ Fetch linked employee record
-      const employee = await storage.getEmployeeFullRecord(normalized);
+      // 2 ─ Fetch linked employee record using the bot user's stored phone
+      const employeePhone = normalizePhone(botUser.phoneNumber);
+      const employee = await storage.getEmployeeFullRecord(employeePhone);
 
       // 3 ─ Update last interaction
       await storage.updateBotUser(botUser.id, { lastInteraction: new Date() });
