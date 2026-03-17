@@ -1670,8 +1670,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const jobTitleCounts: Record<string, number> = {};
       const categoryCounts: Record<string, number> = {};
       const specializationCounts: Record<string, number> = {};
+      const appointmentYearCounts: Record<string, number> = {};
       let withDocuments = 0;
       let withoutDocuments = 0;
+      let withNotes = 0;
+      let withoutNotes = 0;
+      let withShamCash = 0;
+      let withoutShamCash = 0;
 
       for (const emp of employees_data) {
         statusCounts[emp.current_status] = (statusCounts[emp.current_status] || 0) + 1;
@@ -1684,7 +1689,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         if (emp.specialization) {
           specializationCounts[emp.specialization] = (specializationCounts[emp.specialization] || 0) + 1;
         }
+        if (emp.appointment_decision_date) {
+          const year = emp.appointment_decision_date.substring(0, 4);
+          appointmentYearCounts[year] = (appointmentYearCounts[year] || 0) + 1;
+        }
         if (emp.total_documents > 0) withDocuments++; else withoutDocuments++;
+        if (emp.notes) withNotes++; else withoutNotes++;
+        if (emp.sham_cash_number) withShamCash++; else withoutShamCash++;
       }
 
       const statistics = {
@@ -1697,8 +1708,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         by_certificate_type: certTypeCounts,
         by_job_title: jobTitleCounts,
         by_specialization: specializationCounts,
+        by_appointment_year: appointmentYearCounts,
         with_documents: withDocuments,
         without_documents: withoutDocuments,
+        with_notes: withNotes,
+        without_notes: withoutNotes,
+        with_sham_cash: withShamCash,
+        without_sham_cash: withoutShamCash,
       };
 
       // ── 3. All bot users ─────────────────────────────────────────────────
