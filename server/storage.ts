@@ -52,6 +52,9 @@ export interface IStorage {
   updateBotUser(id: number, updates: Partial<BotUser>): Promise<BotUser>;
   deleteBotUser(id: number): Promise<void>;
   deactivateInactiveBotUsers(thresholdMs: number): Promise<number>;
+
+  // Bot – Employee full record lookup
+  getEmployeeFullRecord(normalizedPhone: string): Promise<Employee | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -377,6 +380,12 @@ export class DatabaseStorage implements IStorage {
       )
       .returning({ id: botUsers.id });
     return result.length;
+  }
+
+  async getEmployeeFullRecord(normalizedPhone: string): Promise<Employee | undefined> {
+    const normalize = (raw: string) => raw.replace(/\D/g, "").replace(/^0+/, "");
+    const all = await db.select().from(employees).where(eq(employees.isDeleted, false));
+    return all.find((e) => e.mobile && normalize(e.mobile) === normalizedPhone);
   }
 }
 

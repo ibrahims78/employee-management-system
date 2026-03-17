@@ -1428,6 +1428,150 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // POST /api/v1/bot/get-all-data  (Machine API key required)
+  app.post("/api/v1/bot/get-all-data", authenticateMachineAPI, async (req, res) => {
+    try {
+      const { phoneNumber } = req.body;
+      if (!phoneNumber) {
+        return res.status(400).json({
+          status: "error",
+          message: "رقم الهاتف مطلوب",
+        });
+      }
+
+      const normalized = normalizePhone(String(phoneNumber));
+
+      // 1 ─ Verify bot user exists and session is active
+      const botUser = await storage.getBotUserByPhone(normalized);
+      if (!botUser) {
+        return res.status(404).json({
+          status: "error",
+          message: "لا يوجد مستخدم بوت مسجل بهذا الرقم",
+        });
+      }
+
+      if (!botUser.isBotActive) {
+        return res.status(403).json({
+          status: "error",
+          message: "جلسة البوت غير نشطة لهذا الرقم. يجب تفعيل الجلسة أولاً.",
+          is_active: false,
+        });
+      }
+
+      // 2 ─ Fetch linked employee record
+      const employee = await storage.getEmployeeFullRecord(normalized);
+
+      // 3 ─ Update last interaction
+      await storage.updateBotUser(botUser.id, { lastInteraction: new Date() });
+
+      // 4 ─ If no employee record linked to this phone
+      if (!employee) {
+        return res.json({
+          status: "partial",
+          message: "الموظف مسجل في البوت ولكن بياناته الوظيفية غير موجودة في قاعدة البيانات",
+          data: {
+            profile: null,
+            documents: [],
+            metadata: {
+              fetch_time: new Date().toISOString(),
+              is_active: botUser.isBotActive,
+              phone: normalized,
+              bot_user_name: botUser.fullName,
+            },
+          },
+        });
+      }
+
+      // 5 ─ Build documents list from documentPaths jsonb field
+      const protocol = req.protocol;
+      const host = req.get("host") || "localhost";
+      const baseUrl = `${protocol}://${host}`;
+      const rawPaths = (employee.documentPaths as string[] | null) ?? [];
+      const documents = rawPaths.map((docPath) => {
+        const fileName = path.basename(docPath);
+        const ext = path.extname(fileName).toLowerCase().replace(".", "");
+        const typeMap: Record<string, string> = {
+          pdf: "PDF",
+          jpg: "صورة",
+          jpeg: "صورة",
+          png: "صورة",
+          docx: "Word",
+          doc: "Word",
+          xlsx: "Excel",
+          xls: "Excel",
+        };
+        return {
+          name: fileName,
+          type: typeMap[ext] ?? ext.toUpperCase(),
+          url: `${baseUrl}${docPath}`,
+          path: docPath,
+        };
+      });
+
+      // 6 ─ Build fully-labelled profile (all columns from employees table)
+      const profile = {
+        // Personal
+        id: employee.id,
+        full_name: employee.fullName,
+        father_name: employee.fatherName,
+        mother_name: employee.motherName,
+        place_of_birth: employee.placeOfBirth,
+        date_of_birth: employee.dateOfBirth ? new Date(employee.dateOfBirth).toISOString() : null,
+        registry_place_and_number: employee.registryPlaceAndNumber,
+        national_id: employee.nationalId,
+        sham_cash_number: employee.shamCashNumber ?? null,
+        gender: employee.gender,
+
+        // Professional
+        certificate: employee.certificate,
+        certificate_type: employee.certificateType,
+        specialization: employee.specialization,
+        job_title: employee.jobTitle,
+        category: employee.category,
+        employment_status: employee.employmentStatus,
+        appointment_decision_number: employee.appointmentDecisionNumber,
+        appointment_decision_date: employee.appointmentDecisionDate
+          ? new Date(employee.appointmentDecisionDate).toISOString()
+          : null,
+        first_state_start: employee.firstStateStart
+          ? new Date(employee.firstStateStart).toISOString()
+          : null,
+        first_directorate_start: employee.firstDirectorateStart
+          ? new Date(employee.firstDirectorateStart).toISOString()
+          : null,
+        first_department_start: employee.firstDepartmentStart
+          ? new Date(employee.firstDepartmentStart).toISOString()
+          : null,
+        current_status: employee.currentStatus,
+        assigned_work: employee.assignedWork,
+        mobile: employee.mobile,
+        address: employee.address,
+        notes: employee.notes ?? null,
+
+        // System
+        created_at: new Date(employee.createdAt).toISOString(),
+        updated_at: new Date(employee.updatedAt).toISOString(),
+      };
+
+      // 7 ─ Return structured response
+      return res.json({
+        status: "success",
+        data: {
+          profile,
+          documents,
+          metadata: {
+            fetch_time: new Date().toISOString(),
+            is_active: botUser.isBotActive,
+            total_documents: documents.length,
+          },
+        },
+      });
+    } catch (err) {
+      console.error("[Bot get-all-data] Error:", err);
+      res.status(500).json({ status: "error", message: "خطأ داخلي في الخادم" });
+    }
+  });
+
   // ─── Background Cron: Deactivate inactive bot sessions every 60 seconds ───
   const INACTIVITY_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes
   setInterval(async () => {
