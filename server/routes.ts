@@ -1994,21 +1994,61 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ── GET /api/v1/bot/generate-word-link  ───────────────────────────────────
   // Generates a Word employee card, saves it to storage/uploads/word_exports/,
   // and returns a publicly accessible download URL for use in WhatsApp.
-  // Query params: employeeId=<number>  OR  nationalId=<string>
+  // Query params (any one of):
+  //   employeeId=<number>   – DB row id
+  //   nationalId=<string>   – رقم وطني (also accepted as national_id)
+  //   name=<string>         – full or partial name (Arabic)
+  //   phoneNumber=<string>  – WhatsApp phone → lookup via bot_users → employee
   app.get("/api/v1/bot/generate-word-link", authenticateMachineAPI, async (req, res) => {
     try {
       let employee: Employee | undefined;
+      const q = req.query as Record<string, string>;
 
-      if (req.query.employeeId) {
-        const id = parseInt(req.query.employeeId as string);
+      // Log incoming params for debugging
+      console.log("[generate-word-link] params:", JSON.stringify(q));
+
+      const allEmps = await storage.getEmployees(false, 1, 100000, true, true);
+
+      if (q.employeeId) {
+        const id = parseInt(q.employeeId);
         if (!isNaN(id)) employee = await storage.getEmployee(id);
-      } else if (req.query.nationalId) {
-        const allEmps = await storage.getEmployees(false, 1, 100000, true, true);
-        employee = allEmps.find(e => e.nationalId === (req.query.nationalId as string).trim());
+
+      } else if (q.nationalId || q.national_id) {
+        const nid = (q.nationalId || q.national_id).trim();
+        employee = allEmps.find(e => e.nationalId === nid);
+
+      } else if (q.name || q.fullName || q.full_name) {
+        const rawName = (q.name || q.fullName || q.full_name).trim();
+        // Try exact match first, then partial
+        employee = allEmps.find(e => e.fullName === rawName)
+                || allEmps.find(e => e.fullName.includes(rawName) || rawName.includes(e.fullName));
+
+      } else if (q.phoneNumber || q.phone_number || q.phone) {
+        // Lookup via bot_users table then match by name to employees
+        const phone = (q.phoneNumber || q.phone_number || q.phone).replace(/\D/g, "");
+        const botUser = await db.query.botUsers.findFirst({
+          where: (b, { or, like }) => or(
+            like(b.phoneNumber, `%${phone.slice(-9)}`),
+            like(b.whatsappLid, `%${phone}%`)
+          )
+        });
+        if (botUser?.fullName) {
+          const bName = botUser.fullName.trim();
+          employee = allEmps.find(e => e.fullName === bName)
+                  || allEmps.find(e => e.fullName.includes(bName) || bName.includes(e.fullName))
+                  || allEmps.find(e => e.mobile?.replace(/\D/g, "").endsWith(phone.slice(-9)));
+        }
       }
 
+      // Last resort: if only ONE employee in the whole DB matches the API key owner's
+      // linked bot session, just pick it — but only log a warning here.
       if (!employee) {
-        return res.status(404).json({ status: "error", message: "الموظف غير موجود" });
+        console.warn("[generate-word-link] Could not resolve employee. params:", JSON.stringify(q));
+        return res.status(404).json({
+          status: "error",
+          message: "الموظف غير موجود — يرجى تمرير رقم وطني صحيح (nationalId) أو اسم الموظف (name)",
+          received_params: q
+        });
       }
 
       const fmtDate = (d: Date | string | null | undefined) => {
