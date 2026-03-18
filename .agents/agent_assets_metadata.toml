@@ -96,3 +96,9 @@ id = "EeRgOHcOPjriDQd-gccWr"
 uri = "file://attached_assets/Sidawi_AI_Health_V22_strict.json"
 type = "unspecified"
 title = "Sidawi AI Health V22 - محدّث بالدومين والمفاتيح الجديدة"
+
+[[outputs]]
+id = "9psgodS7rfJvV_c6gdLkL"
+uri = "file://docs/workflows/Sidawi_AI_Health_V22_production.json"
+type = "unspecified"
+title = "Sidawi AI Health V22 — إنتاج (replit.app)"
