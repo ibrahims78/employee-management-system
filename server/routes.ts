@@ -2140,6 +2140,153 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // ── GET /api/v1/bot/generate-custom-excel  ────────────────────────────────
+  // ينشئ ملف Excel مخصص بناءً على فلاتر وأعمدة يختارها الذكاء الاصطناعي
+  // المعاملات (query params):
+  //   status           - وضع العامل الحالي (مثال: على رأس عمله, إجازة, نقل)
+  //   category         - الفئة (مثال: طبي, تمريض, إداري, تقني)
+  //   gender           - الجنس (ذكر / أنثى)
+  //   employmentStatus - الوضع الوظيفي (مثال: دائم, مؤقت, عقد)
+  //   assignedWork     - العمل المكلف به
+  //   search           - بحث نصي في الاسم والرقم الوطني والجوال
+  //   columns          - أعمدة مختارة مفصولة بفاصلة (فارغ = كل الأعمدة)
+  //   title            - عنوان مخصص للملف
+  app.get("/api/v1/bot/generate-custom-excel", authenticateMachineAPI, async (req, res) => {
+    try {
+      const {
+        status,
+        category,
+        gender,
+        employmentStatus,
+        assignedWork,
+        search,
+        columns: columnsParam,
+        title: customTitle,
+      } = req.query as Record<string, string>;
+
+      const fmtDate = (d: Date | string | null | undefined) => {
+        if (!d) return "";
+        const dt = new Date(d as string);
+        if (dt.getFullYear() <= 1970) return "";
+        return format(dt, "dd/MM/yyyy");
+      };
+
+      // ── جميع الأعمدة المتاحة ─────────────────────────────────────────────
+      const allColumns: Record<string, (emp: Employee) => string> = {
+        "الاسم والكنية":        (e) => e.fullName,
+        "اسم الأب":             (e) => e.fatherName || "",
+        "اسم الأم":             (e) => e.motherName || "",
+        "مكان الولادة":         (e) => e.placeOfBirth || "",
+        "تاريخ الولادة":        (e) => fmtDate(e.dateOfBirth),
+        "محل ورقم القيد":      (e) => e.registryPlaceAndNumber || "",
+        "الرقم الوطني":         (e) => e.nationalId || "",
+        "رقم شام كاش":         (e) => e.shamCashNumber || "",
+        "الجنس":                (e) => e.gender,
+        "الشهادة":              (e) => e.certificate || "",
+        "نوع الشهادة":          (e) => e.certificateType || "",
+        "الاختصاص":             (e) => e.specialization || "",
+        "الصفة الوظيفية":       (e) => e.jobTitle,
+        "الفئة":                (e) => e.category,
+        "الوضع الوظيفي":        (e) => e.employmentStatus,
+        "رقم قرار التعيين":     (e) => e.appointmentDecisionNumber || "",
+        "تاريخ قرار التعيين":   (e) => fmtDate(e.appointmentDecisionDate),
+        "أول مباشرة بالدولة":   (e) => fmtDate(e.firstStateStart),
+        "أول مباشرة بالمديرية": (e) => fmtDate(e.firstDirectorateStart),
+        "أول مباشرة بالقسم":    (e) => fmtDate(e.firstDepartmentStart),
+        "وضع العامل الحالي":    (e) => e.currentStatus,
+        "العمل المكلف به":      (e) => e.assignedWork || "",
+        "رقم الجوال":           (e) => e.mobile || "",
+        "العنوان":              (e) => e.address || "",
+        "ملاحظات":              (e) => e.notes || "",
+      };
+
+      // ── تحديد الأعمدة المطلوبة ─────────────────────────────────────────
+      let selectedColumns: string[];
+      if (columnsParam && columnsParam.trim()) {
+        selectedColumns = columnsParam.split(",").map((c) => c.trim()).filter((c) => allColumns[c]);
+        if (selectedColumns.length === 0) selectedColumns = Object.keys(allColumns);
+      } else {
+        selectedColumns = Object.keys(allColumns);
+      }
+
+      // ── جلب الموظفين وتطبيق الفلاتر ──────────────────────────────────
+      let employees = await storage.getEmployees(false, 1, 100000, true, true);
+
+      if (status)           employees = employees.filter((e) => e.currentStatus === status);
+      if (category)         employees = employees.filter((e) => e.category === category);
+      if (gender)           employees = employees.filter((e) => e.gender === gender);
+      if (employmentStatus) employees = employees.filter((e) => e.employmentStatus === employmentStatus);
+      if (assignedWork)     employees = employees.filter((e) => e.assignedWork === assignedWork);
+      if (search) {
+        const q = search.toLowerCase();
+        employees = employees.filter(
+          (e) =>
+            e.fullName.toLowerCase().includes(q) ||
+            (e.nationalId || "").toLowerCase().includes(q) ||
+            (e.mobile || "").toLowerCase().includes(q)
+        );
+      }
+
+      if (employees.length === 0) {
+        return res.json({
+          status: "not_found",
+          message: "لا يوجد موظفون يطابقون معايير الفلترة المحددة.",
+        });
+      }
+
+      // ── بناء الصفوف ────────────────────────────────────────────────────
+      const rows = employees.map((emp) => {
+        const row: Record<string, string> = {};
+        for (const col of selectedColumns) {
+          row[col] = allColumns[col](emp);
+        }
+        return row;
+      });
+
+      const worksheet = XLSX.utils.json_to_sheet(rows);
+      const workbook = XLSX.utils.book_new();
+      const sheetName = customTitle
+        ? customTitle.substring(0, 30)
+        : `تقرير مخصص ${format(new Date(), "dd-MM-yyyy")}`;
+      XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+      const buffer: Buffer = XLSX.write(workbook, { bookType: "xlsx", type: "buffer" });
+
+      const excelExportsDir = path.join(process.cwd(), "storage", "uploads", "excel_exports");
+      await fs.mkdir(excelExportsDir, { recursive: true });
+
+      const safeFileName = `تقرير_مخصص_${format(new Date(), "yyyyMMdd_HHmmss")}.xlsx`;
+      await fs.writeFile(path.join(excelExportsDir, safeFileName), buffer);
+
+      const apiKey = (req.headers["x-api-key"] ?? req.query._t) as string;
+      const baseUrl = `${req.protocol}://${req.get("host")}`;
+      const downloadUrl = `${baseUrl}/api/v1/files/uploads/excel_exports/${encodeURIComponent(safeFileName)}?_t=${apiKey}`;
+
+      const filtersApplied = [
+        status           ? `الوضع: ${status}` : null,
+        category         ? `الفئة: ${category}` : null,
+        gender           ? `الجنس: ${gender}` : null,
+        employmentStatus ? `التوظيف: ${employmentStatus}` : null,
+        assignedWork     ? `العمل: ${assignedWork}` : null,
+        search           ? `بحث: ${search}` : null,
+      ].filter(Boolean).join(" | ");
+
+      console.log(`[Bot generate-custom-excel] ${employees.length} موظف، فلاتر: ${filtersApplied || "بدون"}`);
+
+      res.json({
+        status: "success",
+        employeeCount: employees.length,
+        columnsCount: selectedColumns.length,
+        filtersApplied: filtersApplied || "بدون فلاتر",
+        downloadUrl,
+        fileName: safeFileName,
+        message: `تم إنشاء ملف Excel مخصص يحتوي على ${employees.length} موظف (${selectedColumns.length} عمود). رابط التنزيل: ${downloadUrl}`,
+      });
+    } catch (err) {
+      console.error("[Bot generate-custom-excel] Error:", err);
+      res.status(500).json({ status: "error", message: "خطأ في إنشاء ملف Excel المخصص" });
+    }
+  });
+
   // ── GET /api/v1/bot/export-word?employeeId=X  ─────────────────────────────
   // Generates and returns a Word (.docx) employee card for the given employee ID.
   app.get("/api/v1/bot/export-word", authenticateMachineAPI, async (req, res) => {
