@@ -19,6 +19,13 @@ import * as XLSX from "xlsx";
 import { Document as DocxDocument, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } from "docx";
 import { randomBytes } from "crypto";
 
+// Strip password from user object before sending to client
+function sanitizeUser(user: any) {
+  if (!user) return user;
+  const { password, ...safe } = user;
+  return safe;
+}
+
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 5, // Limit each IP to 5 login requests per windowMs
@@ -337,7 +344,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           newValues: { loginTime: new Date() }
         });
         
-        res.status(200).json({ user: updatedUser });
+        res.status(200).json({ user: sanitizeUser(updatedUser) });
       });
     })(req, res, next);
   });
@@ -365,7 +372,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get(api.auth.me.path, (req, res) => {
     if (!req.isAuthenticated()) return res.status(401).json({ message: "Not authenticated" });
-    res.status(200).json(req.user);
+    res.status(200).json(sanitizeUser(req.user));
   });
 
   // Heartbeat — keeps isOnline and lastLoginAt fresh while the user is active
@@ -377,7 +384,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       isOnline: true,
       lastLoginAt: new Date(),
     });
-    res.status(200).json({ user: updatedUser });
+    res.status(200).json({ user: sanitizeUser(updatedUser) });
   });
 
   // Protected middleware for all below
@@ -519,7 +526,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const employee = await storage.getEmployee(id);
     if (!employee) return res.status(404).json({ message: "Employee not found" });
     const history = await storage.getEmployeeHistory(String(id));
-    res.json(history);
+    res.json(history.map(({ log, user }) => ({ log, user: user ? sanitizeUser(user) : null })));
   });
 
   app.get(api.employees.get.path, async (req, res) => {
@@ -815,7 +822,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       return res.status(403).json({ message: "Forbidden: Admin access required" });
     }
     const users = await storage.getUsers();
-    res.json(users);
+    res.json(users.map(sanitizeUser));
   });
 
   app.post(api.users.create.path, async (req, res) => {
@@ -836,7 +843,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           newValues: { username: input.username, role: input.role }
         });
       }
-      res.status(201).json(user);
+      res.status(201).json(sanitizeUser(user));
     } catch (e) {
       if (e instanceof z.ZodError) return res.status(400).json({ message: e.errors[0].message, field: e.errors[0].path.join('.') });
       throw e;
@@ -869,7 +876,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           newValues: { username: updates.username, role: updates.role }
         });
       }
-      res.json(user);
+      res.json(sanitizeUser(user));
     } catch (e) {
       if (e instanceof z.ZodError) return res.status(400).json({ message: e.errors[0].message, field: e.errors[0].path.join('.') });
       throw e;
@@ -917,7 +924,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       storage.getAuditLogActionCounts(),
     ]);
 
-    res.json({ ...result, page, limit, actionCounts });
+    const sanitizedLogs = result.logs.map(({ log, user }) => ({
+      log,
+      user: user ? sanitizeUser(user) : null,
+    }));
+
+    res.json({ ...result, logs: sanitizedLogs, page, limit, actionCounts });
   });
 
   app.delete('/api/audit-logs', async (req, res) => {

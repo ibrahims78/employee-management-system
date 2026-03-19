@@ -77,7 +77,7 @@ When `api_keys` table is empty, login allowed without key. `GET /api/auth/setup-
 
 ### Session management:
 - Sessions identified by WhatsApp LID (stored in `whatsappLid` field)
-- Auto-deactivate after 10 min inactivity (`AUTO_TIMEOUT_MS = 10 * 60 * 1000`)
+- Auto-deactivate after 5 min inactivity (`AUTO_TIMEOUT_MS = 5 * 60 * 1000`)
 - Background cron job every 60s deactivates timed-out sessions
 
 ### Session Hijacking Protection (added March 2026):
@@ -89,23 +89,34 @@ When `api_keys` table is empty, login allowed without key. `GET /api/auth/setup-
 - `POST /api/v1/bot/check-auth` — Auth + session management
 - `POST /api/v1/bot/get-all-data` — Full employee data by phone
 - `GET /api/v1/bot/master-query` — Full DB snapshot for AI (employees + docs)
+- `GET /api/v1/bot/stats` — Quick statistics (totals, by status/category/gender)
 - `GET /api/v1/bot/generate-word-link` — Generate Word card + download URL
-- `GET /api/v1/bot/generate-excel-link` — Export all employees Excel + download URL
+- `GET /api/v1/bot/generate-excel-link` — Export all employees Excel + download URL (legacy)
+- `GET /api/v1/bot/generate-custom-excel` — Export filtered/custom-column Excel + download URL
+- `POST /api/v1/bot/log-conversation` — Log bot conversation to audit log
+- `POST /api/v1/bot/cleanup-sessions` — Manually clean up timed-out bot sessions
 - `GET /api/v1/files/:path` — Serve employee files protected by API key
 
 ## n8n Workflow
 
-### File: `docs/workflows/Sidawi_AI_Health_V22.json`
+### Files:
+- `docs/workflows/Sidawi_AI_Health_V22.json` — WhatsApp bot (3 AI tools)
+- `docs/workflows/Sidawi_AI_Health_V23.json` — WhatsApp bot + Telegram (4 AI tools, dedicated stats tool)
 
-### AI Agent strict rules (system prompt):
-1. MUST call `fetch_employee_database` before ANY response
-2. If employee not found: respond ONLY with: "لا يوجد موظف بهذا الاسم أو الرقم في قاعدة بيانات المديرية."
-3. Documents only from `direct_url` field — never fabricate links
-4. Word file: get `nationalId` from DB tool first, then call `generate_word_link`
-5. Out of scope: "أنا متخصص في بيانات موظفي المديرية فقط."
+### V22 AI tools: fetch_employee_database1, generate_word_link1, export_excel_tool
+### V23 AI tools: fetch_employee_database, get_employee_stats, generate_word_link, export_excel_tool
+
+### AI Agent strict rules (system prompt - both V22 & V23):
+1. MUST call the appropriate tool before ANY response — no training-data fallback
+2. Statistics: use `get_employee_stats` (V23) or `fetch_employee_database` (V22)
+3. If employee not found: respond ONLY with: "لا يوجد موظف بهذا الاسم أو الرقم في قاعدة بيانات المديرية."
+4. Documents only from `direct_url` field — never fabricate links
+5. Word file: get `nationalId` from DB tool first, then call `generate_word_link`
+6. Custom Excel: call `export_excel_tool` with optional filters (status, category, gender, employmentStatus, assignedWork, search) and optional columns param
+7. Out of scope: "أنا متخصص في بيانات موظفي المديرية فقط."
 
 ### n8n Workflow URLs (production):
-- Update `docs/workflows/Sidawi_AI_Health_V22.json` domain after each deployment
+- Update workflow JSON domain after each deployment
 - Current machine API key: stored in `api_keys` table, `key_type = 'machine'`, description `n8n`
 
 ### User isolation:
