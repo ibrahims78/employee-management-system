@@ -4,7 +4,7 @@
 
 **الاسم:** Sidawi AI Health V22  
 **الإصدار:** V22 (النهائي المحدّث)  
-**الرابط الإنتاجي:** https://employee-management-system-ai-chat--alsid2226.replit.app  
+**الرابط الإنتاجي:** https://employee-management-system-ai-chat--alsid2225.replit.app  
 **مفتاح الآلة:** `3477e2bd6616a95eb2dcbb3a9e39b663fddab5a90fe7d71cdd45a7b34040fca4`
 
 ---
@@ -110,7 +110,7 @@
 | النوع | `n8n-nodes-base.httpRequest` |
 | الإصدار | 4.1 |
 | طريقة HTTP | `POST` |
-| الرابط | `https://employee-management-system-ai-chat--alsid2226.replit.app/api/v1/bot/check-auth` |
+| الرابط | `https://employee-management-system-ai-chat--alsid2225.replit.app/api/v1/bot/check-auth` |
 | المصادقة | `x-api-key: 3477e2bd6616a95eb2dcbb3a9e39b663fddab5a90fe7d71cdd45a7b34040fca4` |
 
 **المُدخلات التي يُرسلها:**
@@ -271,7 +271,7 @@
 | النوع | `@n8n/n8n-nodes-langchain.toolHttpRequest` |
 | الإصدار | 1.1 |
 | طريقة HTTP | `GET` |
-| الرابط | `https://employee-management-system-ai-chat--alsid2226.replit.app/api/v1/bot/master-query?_t=3477e2bd...` |
+| الرابط | `https://employee-management-system-ai-chat--alsid2225.replit.app/api/v1/bot/master-query?_t=3477e2bd...` |
 | المصادقة | `x-api-key: 3477e2bd6616a95eb2dcbb3a9e39b663fddab5a90fe7d71cdd45a7b34040fca4` |
 
 **الوصف للوكيل:**
@@ -336,7 +336,7 @@
 | النوع | `@n8n/n8n-nodes-langchain.toolHttpRequest` |
 | الإصدار | 1.1 |
 | طريقة HTTP | `GET` |
-| الرابط | `https://employee-management-system-ai-chat--alsid2226.replit.app/api/v1/bot/generate-word-link` |
+| الرابط | `https://employee-management-system-ai-chat--alsid2225.replit.app/api/v1/bot/generate-word-link` |
 | المُعاملات | `nationalId` أو `name` (اختياري) |
 
 **الوصف للوكيل:**
@@ -381,7 +381,7 @@
 | النوع | `@n8n/n8n-nodes-langchain.toolHttpRequest` |
 | الإصدار | 1.1 |
 | طريقة HTTP | `GET` |
-| الرابط | `https://employee-management-system-ai-chat--alsid2226.replit.app/api/v1/bot/generate-excel-link` |
+| الرابط | `https://employee-management-system-ai-chat--alsid2225.replit.app/api/v1/bot/generate-excel-link` |
 | لا تحتاج مُعاملات | تُصدّر جميع الموظفين |
 
 **الوصف للوكيل:**
@@ -506,7 +506,7 @@
 
 | العنصر | القيمة |
 |--------|--------|
-| رابط التطبيق المنشور | `https://employee-management-system-ai-chat--alsid2226.replit.app` |
+| رابط التطبيق المنشور | `https://employee-management-system-ai-chat--alsid2225.replit.app` |
 | مفتاح الآلة (n8n) | `3477e2bd6616a95eb2dcbb3a9e39b663fddab5a90fe7d71cdd45a7b34040fca4` |
 | Webhook URL | `https://<n8n-server>/webhook/3e1fee9b-ec97-4094-8a2e-21ca8aaaaab2` |
 | خادم واتساب | `http://172.17.0.1:8082` |

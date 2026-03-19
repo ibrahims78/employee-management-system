@@ -4,7 +4,7 @@
 
 **الإصدار:** V22 (النهائي)  
 **التاريخ:** مارس 2026  
-**الرابط الإنتاجي:** https://employee-management-system-ai-chat--alsid2226.replit.app  
+**الرابط الإنتاجي:** https://employee-management-system-ai-chat--alsid2225.replit.app  
 **المطوّر:** إبراهيم الصيداوي
 
 ---
@@ -515,9 +515,9 @@ script/build.ts يُشغَّل بـ tsx
 | Build command | `npm run build` |
 | Public directory | `dist/public` |
 | Port | `5000` |
-| الرابط | https://employee-management-system-ai-chat--alsid2226.replit.app |
+| الرابط | https://employee-management-system-ai-chat--alsid2225.replit.app |
 
-> **تنبيه مهم:** بعد كل إعادة نشر، قد يتغير الـ slug في الرابط (مثلاً `alsid2226` → `alsid2227`). يجب تحديث:
+> **تنبيه مهم:** بعد كل إعادة نشر، قد يتغير الـ slug في الرابط (مثلاً `alsid2225` → `alsid2227`). يجب تحديث:
 > 1. ملف `docs/workflows/Sidawi_AI_Health_V22.json`
 > 2. ملف `README.md`
 > 3. ملف `replit.md`
