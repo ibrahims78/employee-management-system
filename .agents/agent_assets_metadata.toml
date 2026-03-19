@@ -114,3 +114,9 @@ id = "5z2tkDWI--uJJHOB1jM4d"
 uri = "file://docs/workflows/Sidawi_AI_Health_V22.json"
 type = "unspecified"
 title = "Sidawi AI Health V22 — النسخة النهائية المحدّثة"
+
+[[outputs]]
+id = "obcpw_GOPknTis8UMC7uj"
+uri = "file://docs/workflows/Sidawi_AI_Health_V23_Guide.md"
+type = "text"
+title = "دليل Sidawi AI Health V23 - الشرح الكامل"
