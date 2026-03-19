@@ -456,6 +456,36 @@
         -1536,
         240
       ]
+    },
+    {
+      "id": "wa-admin-activation-v22",
+      "name": "WA_Admin_Activation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1632,
+        -416
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://172.17.0.1:8082/send-text",
+        "sendBody": true,
+        "bodyContentType": "json",
+        "body": {
+          "parameters": [
+            {
+              "name": "number",
+              "value": "=9671XXXXXXXXXX"
+            },
+            {
+              "name": "message",
+              "value": "=✅ تفعيل جديد للبوت\n\n👤 الاسم: {{ $('Verify_Identity').item.json.full_name }}\n📞 الرقم: {{ $('Sidawi_Health_WH').item.json.body.from }}\n⏰ الوقت: {{ new Date().toLocaleString('ar-SA') }}\n\n💡 المستخدم أصبح نشطاً في النظام."
+            }
+          ]
+        },
+        "options": {}
+      },
+      "notes": "⚠️ غيّر قيمة number برقم هاتف المدير (أرقام فقط بدون مسافات)"
     }
   ],
   "pinData": {},
@@ -575,6 +605,17 @@
           {
             "node": "AI_Agent",
             "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WA_Welcome": {
+      "main": [
+        [
+          {
+            "node": "WA_Admin_Activation",
+            "type": "main",
             "index": 0
           }
         ]

@@ -1055,6 +1055,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(allSettings);
   });
 
+  // ─── GET /api/v1/bot/workflow-v22 ────────────────────────────────────────────
+  app.get("/api/v1/bot/workflow-v22", async (req, res) => {
+    if (req.user?.role !== 'admin') return res.status(403).send("Unauthorized");
+    try {
+      const workflowPath = path.resolve(process.cwd(), "docs/workflows/Sidawi_AI_Health_V22.json");
+      const content = await fs.readFile(workflowPath, "utf-8");
+      res.setHeader("Content-Type", "application/json");
+      res.setHeader("Content-Disposition", 'attachment; filename="Sidawi_AI_Health_V22.json"');
+      res.send(content);
+    } catch (e: any) {
+      res.status(404).json({ message: "ملف الورك فلو غير موجود" });
+    }
+  });
+
   // ─── GET /api/v1/bot/workflow-v23 ────────────────────────────────────────────
   // تحميل ملف الورك فلو V23 المحدّث (فقط للمدير)
   app.get("/api/v1/bot/workflow-v23", async (req, res) => {
@@ -1402,16 +1416,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const gatewayUrl   = await storage.getSetting("whatsapp_gateway_url");
       const gatewayToken = await storage.getSetting("whatsapp_gateway_token");
 
-      if (adminPhone && gatewayUrl && gatewayToken) {
+      if (adminPhone && gatewayUrl) {
         try {
-          const phone = String(adminPhone).replace(/\D/g, "");
+          const number = String(adminPhone).replace(/\D/g, "");
+          const waHeaders: Record<string, string> = { "Content-Type": "application/json" };
+          if (gatewayToken) waHeaders["Authorization"] = `Bearer ${String(gatewayToken)}`;
           const waRes = await fetch(String(gatewayUrl), {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": `Bearer ${String(gatewayToken)}`,
-            },
-            body: JSON.stringify({ phone, message }),
+            headers: waHeaders,
+            body: JSON.stringify({ number, message }),
           });
           if (waRes.ok) {
             results.push({ channel: "whatsapp", success: true });
@@ -1491,18 +1504,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const gatewayUrl = await storage.getSetting("whatsapp_gateway_url");
         const gatewayToken = await storage.getSetting("whatsapp_gateway_token");
 
-        if (!gatewayUrl || !gatewayToken) {
-          results.push({ channel: "whatsapp", success: false, error: "إعدادات بوابة واتساب غير مُهيّأة" });
+        if (!gatewayUrl) {
+          results.push({ channel: "whatsapp", success: false, error: "رابط بوابة واتساب غير مُهيّأ" });
         } else {
           try {
-            const phone = botUser.phoneNumber.replace(/\D/g, "");
+            const number = botUser.phoneNumber.replace(/\D/g, "");
+            const waHeaders: Record<string, string> = { "Content-Type": "application/json" };
+            if (gatewayToken) waHeaders["Authorization"] = `Bearer ${String(gatewayToken)}`;
             const waRes = await fetch(String(gatewayUrl), {
               method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${String(gatewayToken)}`,
-              },
-              body: JSON.stringify({ phone, message }),
+              headers: waHeaders,
+              body: JSON.stringify({ number, message }),
             });
             if (waRes.ok) {
               results.push({ channel: "whatsapp", success: true });

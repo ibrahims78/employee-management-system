@@ -698,12 +698,15 @@ function NotificationSettingsCard() {
             </svg>
             إعدادات بوابة واتساب
           </div>
-          <div className="space-y-2 pl-6">
+          <p className="text-xs text-muted-foreground pr-6">
+            البوابة تستقبل طلب <code className="bg-muted px-1 rounded">POST</code> يحتوي على حقلَين: <code className="bg-muted px-1 rounded">number</code> (رقم الهاتف) و <code className="bg-muted px-1 rounded">message</code> (نص الرسالة). إذا كانت البوابة محلية (مثل n8n WhatsApp gateway) لا تحتاج إلى توكن.
+          </p>
+          <div className="space-y-2 pr-6">
             <div>
               <label className="text-xs text-muted-foreground mb-1 block">رابط API البوابة</label>
               <Input
                 data-testid="input-wa-gateway-url"
-                placeholder="https://api.wagateway.example.com/sendMessage"
+                placeholder="http://172.17.0.1:8082/send-text"
                 value={waUrl}
                 onChange={(e) => setWaUrl(e.target.value)}
                 dir="ltr"
@@ -711,12 +714,14 @@ function NotificationSettingsCard() {
               />
             </div>
             <div>
-              <label className="text-xs text-muted-foreground mb-1 block">مفتاح Bearer Token</label>
+              <label className="text-xs text-muted-foreground mb-1 block">
+                Bearer Token <span className="text-muted-foreground font-normal">(اختياري — للبوابات التي تتطلب مصادقة)</span>
+              </label>
               <div className="relative">
                 <Input
                   data-testid="input-wa-gateway-token"
                   type={showWaToken ? "text" : "password"}
-                  placeholder="ادخل توكن المصادقة"
+                  placeholder="اتركه فارغاً إذا كانت البوابة لا تتطلب مصادقة"
                   value={waToken}
                   onChange={(e) => setWaToken(e.target.value)}
                   dir="ltr"
@@ -789,13 +794,24 @@ function NotificationSettingsCard() {
         <div className="rounded-lg border border-indigo-500/30 bg-indigo-50/50 dark:bg-indigo-950/20 p-4 space-y-3">
           <div className="flex items-center gap-2 text-sm font-semibold text-indigo-700 dark:text-indigo-400">
             <Download className="h-4 w-4" />
-            ورك فلو n8n المُحدَّث (V23)
+            ملفات ورك فلو n8n المُحدَّثة
           </div>
           <p className="text-xs text-muted-foreground pr-6">
-            تم تحديث ملف V23 لاستخدام مسار <code className="bg-muted px-1 rounded">/api/v1/bot/admin-notify</code> بدلاً من التوكن المثبّت.
-            حمّل الملف المحدّث وأعد استيراده في n8n.
+            تم تحديث ملفَي V22 وV23 ليرسلا إشعاراً للمدير عند كل تفعيل جديد للبوت.
+            البوابة تستخدم الحقل <code className="bg-muted px-1 rounded">number</code> لرقم الهاتف وليس <code className="bg-muted px-1 rounded">phone</code>.
+            حمّل الملفات وأعد استيرادها في n8n.
           </p>
-          <div className="pr-6">
+          <div className="pr-6 flex flex-col gap-2">
+            <a
+              href="/api/v1/bot/workflow-v22"
+              download="Sidawi_AI_Health_V22.json"
+              className="inline-flex items-center gap-2 text-xs font-medium text-green-600 dark:text-green-400 underline underline-offset-2 hover:text-green-800"
+              data-testid="link-download-workflow-v22"
+            >
+              <Download className="h-3.5 w-3.5" />
+              تحميل Sidawi_AI_Health_V22.json
+              <span className="text-[10px] text-muted-foreground no-underline">(يحتوي على إشعار للمدير عند التفعيل — غيّر رقم المدير في node WA_Admin_Activation)</span>
+            </a>
             <a
               href="/api/v1/bot/workflow-v23"
               download="Sidawi_AI_Health_V23.json"
@@ -804,6 +820,7 @@ function NotificationSettingsCard() {
             >
               <Download className="h-3.5 w-3.5" />
               تحميل Sidawi_AI_Health_V23.json
+              <span className="text-[10px] text-muted-foreground no-underline">(يرسل إشعارات الأخطاء والتفعيل والتنظيف عبر /api/v1/bot/admin-notify)</span>
             </a>
           </div>
         </div>
