@@ -470,8 +470,8 @@
         "method": "POST",
         "url": "http://172.17.0.1:8082/send-text",
         "sendBody": true,
-        "bodyContentType": "json",
-        "body": {
+        "options": {},
+        "bodyParameters": {
           "parameters": [
             {
               "name": "number",
@@ -482,8 +482,7 @@
               "value": "=✅ تفعيل جديد للبوت\n\n👤 الاسم: {{ $('Verify_Identity').item.json.full_name }}\n📞 الرقم: {{ $('Sidawi_Health_WH').item.json.body.from }}\n⏰ الوقت: {{ new Date().toLocaleString('ar-SA') }}\n\n💡 المستخدم أصبح نشطاً في النظام."
             }
           ]
-        },
-        "options": {}
+        }
       },
       "notes": "⚠️ غيّر قيمة number برقم هاتف المدير (أرقام فقط بدون مسافات)"
     }
