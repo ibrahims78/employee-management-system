@@ -1055,30 +1055,69 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(allSettings);
   });
 
+  // ─── Helper: inject live URL/key/WA-URL into workflow JSON ──────────────────
+  async function buildWorkflowJson(req: Request, filename: string): Promise<{ json: string; missing: string[] }> {
+    const workflowPath = path.resolve(process.cwd(), `docs/workflows/${filename}`);
+    let content = await fs.readFile(workflowPath, "utf-8");
+
+    const missing: string[] = [];
+
+    // 1. App base URL
+    const protocol = req.headers["x-forwarded-proto"] || req.protocol || "https";
+    const host = req.headers["x-forwarded-host"] || req.headers.host || "";
+    const appUrl = `${protocol}://${host}`;
+    const OLD_APP_URL = "https://employee-management-system-ai-chat--alsid2225.replit.app";
+    content = content.split(OLD_APP_URL).join(appUrl);
+
+    // 2. First active machine API key
+    const allKeys = await storage.getApiKeys();
+    const machineKey = allKeys.find((k) => k.keyType === "machine" && k.isActive);
+    const OLD_API_KEY = "3477e2bd6616a95eb2dcbb3a9e39b663fddab5a90fe7d71cdd45a7b34040fca4";
+    if (machineKey) {
+      content = content.split(OLD_API_KEY).join(machineKey.keyValue);
+    } else {
+      missing.push("machine_api_key");
+    }
+
+    // 3. WhatsApp gateway URL
+    const waUrl = await storage.getSetting("whatsapp_gateway_url");
+    const OLD_WA_URL = "http://172.17.0.1:8082/send-text";
+    if (waUrl && String(waUrl).trim()) {
+      content = content.split(OLD_WA_URL).join(String(waUrl).trim());
+    } else {
+      missing.push("whatsapp_gateway_url");
+    }
+
+    return { json: content, missing };
+  }
+
   // ─── GET /api/v1/bot/workflow-v22 ────────────────────────────────────────────
   app.get("/api/v1/bot/workflow-v22", async (req, res) => {
     if (req.user?.role !== 'admin') return res.status(403).send("Unauthorized");
     try {
-      const workflowPath = path.resolve(process.cwd(), "docs/workflows/Sidawi_AI_Health_V22.json");
-      const content = await fs.readFile(workflowPath, "utf-8");
+      const { json, missing } = await buildWorkflowJson(req, "Sidawi_AI_Health_V22.json");
+      if (missing.length > 0) {
+        return res.status(422).json({ message: "حقول مطلوبة غير مكتملة", missing });
+      }
       res.setHeader("Content-Type", "application/json");
       res.setHeader("Content-Disposition", 'attachment; filename="Sidawi_AI_Health_V22.json"');
-      res.send(content);
+      res.send(json);
     } catch (e: any) {
       res.status(404).json({ message: "ملف الورك فلو غير موجود" });
     }
   });
 
   // ─── GET /api/v1/bot/workflow-v23 ────────────────────────────────────────────
-  // تحميل ملف الورك فلو V23 المحدّث (فقط للمدير)
   app.get("/api/v1/bot/workflow-v23", async (req, res) => {
     if (req.user?.role !== 'admin') return res.status(403).send("Unauthorized");
     try {
-      const workflowPath = path.resolve(process.cwd(), "docs/workflows/Sidawi_AI_Health_V23.json");
-      const content = await fs.readFile(workflowPath, "utf-8");
+      const { json, missing } = await buildWorkflowJson(req, "Sidawi_AI_Health_V23.json");
+      if (missing.length > 0) {
+        return res.status(422).json({ message: "حقول مطلوبة غير مكتملة", missing });
+      }
       res.setHeader("Content-Type", "application/json");
       res.setHeader("Content-Disposition", 'attachment; filename="Sidawi_AI_Health_V23.json"');
-      res.send(content);
+      res.send(json);
     } catch (e: any) {
       res.status(404).json({ message: "ملف الورك فلو غير موجود" });
     }

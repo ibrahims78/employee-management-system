@@ -611,11 +611,20 @@ function NotificationSettingsCard() {
   const [showWaToken, setShowWaToken] = useState(false);
   const [showTgToken, setShowTgToken] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [downloadingV22, setDownloadingV22] = useState(false);
+  const [downloadingV23, setDownloadingV23] = useState(false);
 
   const { data: settings, isLoading } = useQuery<any[]>({
     queryKey: ["/api/settings"],
     retry: false,
   });
+
+  const { data: apiKeysList = [] } = useQuery<any[]>({
+    queryKey: ["/api/api-keys"],
+    retry: false,
+  });
+
+  const hasMachineKey = apiKeysList.some((k: any) => k.keyType === "machine" && k.isActive);
 
   useEffect(() => {
     if (!settings) return;
@@ -627,7 +636,24 @@ function NotificationSettingsCard() {
     setTgChatId(find("telegram_notification_chat_id"));
   }, [settings]);
 
+  function getMissingFields(): string[] {
+    const missing: string[] = [];
+    if (!waUrl.trim()) missing.push("رابط بوابة واتساب");
+    if (!hasMachineKey) missing.push("مفتاح آلة (machine) فعّال");
+    return missing;
+  }
+
   async function saveSettings() {
+    const missing = getMissingFields();
+    if (missing.length > 0) {
+      toast({
+        title: "حقول مطلوبة غير مكتملة",
+        description: `يجب تعبئة: ${missing.join(" — ")} قبل الحفظ وتحميل ملفات الورك فلو.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     setSaving(true);
     try {
       await Promise.all([
@@ -638,7 +664,10 @@ function NotificationSettingsCard() {
         apiRequest("POST", "/api/settings", { key: "telegram_notification_chat_id", value: tgChatId.trim() }),
       ]);
       queryClient.invalidateQueries({ queryKey: ["/api/settings"] });
-      toast({ title: "تم حفظ إعدادات الإشعارات بنجاح" });
+      toast({
+        title: "تم حفظ الإعدادات بنجاح",
+        description: "يمكنك الآن تحميل ملفات الورك فلو المُحدَّثة بالروابط والمفاتيح الصحيحة.",
+      });
     } catch (e: any) {
       toast({ title: "فشل الحفظ", description: e.message, variant: "destructive" });
     } finally {
@@ -646,7 +675,60 @@ function NotificationSettingsCard() {
     }
   }
 
+  async function downloadWorkflow(version: "v22" | "v23") {
+    const missing = getMissingFields();
+    if (missing.length > 0) {
+      toast({
+        title: "لا يمكن التحميل — حقول مطلوبة ناقصة",
+        description: `يجب تعبئة وحفظ: ${missing.join(" — ")} أولاً حتى يتم تضمينها في ملف الورك فلو.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (version === "v22") setDownloadingV22(true);
+    else setDownloadingV23(true);
+
+    try {
+      const res = await fetch(`/api/v1/bot/workflow-${version}`, { credentials: "include" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        const missingServer: string[] = data.missing ?? [];
+        const missingLabels: Record<string, string> = {
+          machine_api_key: "مفتاح آلة (machine) فعّال",
+          whatsapp_gateway_url: "رابط بوابة واتساب",
+        };
+        const labels = missingServer.map((m) => missingLabels[m] ?? m);
+        toast({
+          title: "لا يمكن إنشاء الملف",
+          description: labels.length > 0
+            ? `يجب تعبئة: ${labels.join(" — ")}`
+            : data.message ?? "خطأ غير معروف",
+          variant: "destructive",
+        });
+        return;
+      }
+      const blob = await res.blob();
+      const filename = version === "v22" ? "Sidawi_AI_Health_V22.json" : "Sidawi_AI_Health_V23.json";
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast({ title: `تم تحميل ${filename} بنجاح`, description: "الملف محدَّث بالرابط والمفتاح الصحيحَين." });
+    } catch (e: any) {
+      toast({ title: "فشل التحميل", description: e.message, variant: "destructive" });
+    } finally {
+      if (version === "v22") setDownloadingV22(false);
+      else setDownloadingV23(false);
+    }
+  }
+
   if (isLoading) return null;
+
+  const missingFields = getMissingFields();
+  const readyToDownload = missingFields.length === 0;
 
   return (
     <Card className="overflow-hidden border-purple-500/20 shadow-lg">
@@ -696,22 +778,30 @@ function NotificationSettingsCard() {
             <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current" xmlns="http://www.w3.org/2000/svg">
               <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
             </svg>
-            إعدادات بوابة واتساب
+            إعدادات بوابة واتساب <span className="text-destructive">*</span>
           </div>
           <p className="text-xs text-muted-foreground pr-6">
             البوابة تستقبل طلب <code className="bg-muted px-1 rounded">POST</code> يحتوي على حقلَين: <code className="bg-muted px-1 rounded">number</code> (رقم الهاتف) و <code className="bg-muted px-1 rounded">message</code> (نص الرسالة). إذا كانت البوابة محلية (مثل n8n WhatsApp gateway) لا تحتاج إلى توكن.
           </p>
           <div className="space-y-2 pr-6">
             <div>
-              <label className="text-xs text-muted-foreground mb-1 block">رابط API البوابة</label>
+              <label className="text-xs text-muted-foreground mb-1 block">
+                رابط API البوابة <span className="text-destructive font-bold">*مطلوب</span>
+              </label>
               <Input
                 data-testid="input-wa-gateway-url"
                 placeholder="http://172.17.0.1:8082/send-text"
                 value={waUrl}
                 onChange={(e) => setWaUrl(e.target.value)}
                 dir="ltr"
-                className="font-mono text-sm"
+                className={`font-mono text-sm ${!waUrl.trim() ? "border-destructive/50 focus-visible:ring-destructive/30" : ""}`}
               />
+              {!waUrl.trim() && (
+                <p className="text-xs text-destructive mt-1 flex items-center gap-1">
+                  <AlertTriangle className="h-3 w-3" />
+                  هذا الحقل مطلوب لتضمينه في ملفات الورك فلو
+                </p>
+              )}
             </div>
             <div>
               <label className="text-xs text-muted-foreground mb-1 block">
@@ -791,37 +881,60 @@ function NotificationSettingsCard() {
         <div className="border-t" />
 
         {/* Workflow Download */}
-        <div className="rounded-lg border border-indigo-500/30 bg-indigo-50/50 dark:bg-indigo-950/20 p-4 space-y-3">
-          <div className="flex items-center gap-2 text-sm font-semibold text-indigo-700 dark:text-indigo-400">
+        <div className={`rounded-lg border p-4 space-y-3 ${readyToDownload ? "border-indigo-500/30 bg-indigo-50/50 dark:bg-indigo-950/20" : "border-destructive/30 bg-destructive/5"}`}>
+          <div className={`flex items-center gap-2 text-sm font-semibold ${readyToDownload ? "text-indigo-700 dark:text-indigo-400" : "text-destructive"}`}>
             <Download className="h-4 w-4" />
-            ملفات ورك فلو n8n المُحدَّثة
+            ملفات ورك فلو n8n المُحدَّثة بالروابط والمفاتيح
           </div>
-          <p className="text-xs text-muted-foreground pr-6">
-            تم تحديث ملفَي V22 وV23 ليرسلا إشعاراً للمدير عند كل تفعيل جديد للبوت.
-            البوابة تستخدم الحقل <code className="bg-muted px-1 rounded">number</code> لرقم الهاتف وليس <code className="bg-muted px-1 rounded">phone</code>.
-            حمّل الملفات وأعد استيرادها في n8n.
-          </p>
-          <div className="pr-6 flex flex-col gap-2">
-            <a
-              href="/api/v1/bot/workflow-v22"
-              download="Sidawi_AI_Health_V22.json"
-              className="inline-flex items-center gap-2 text-xs font-medium text-green-600 dark:text-green-400 underline underline-offset-2 hover:text-green-800"
-              data-testid="link-download-workflow-v22"
+
+          {/* Status checklist */}
+          <div className="space-y-1.5 pr-2">
+            <div className={`flex items-center gap-2 text-xs font-medium ${hasMachineKey ? "text-green-700 dark:text-green-400" : "text-destructive"}`}>
+              {hasMachineKey ? <CheckCircle2 className="h-3.5 w-3.5 shrink-0" /> : <AlertTriangle className="h-3.5 w-3.5 shrink-0" />}
+              {hasMachineKey ? "مفتاح الآلة (machine): متوفر — سيُضمَّن في الملف تلقائياً" : "مفتاح الآلة (machine): غير موجود — أنشئ مفتاح من نوع آلة أولاً"}
+            </div>
+            <div className={`flex items-center gap-2 text-xs font-medium ${waUrl.trim() ? "text-green-700 dark:text-green-400" : "text-destructive"}`}>
+              {waUrl.trim() ? <CheckCircle2 className="h-3.5 w-3.5 shrink-0" /> : <AlertTriangle className="h-3.5 w-3.5 shrink-0" />}
+              {waUrl.trim() ? `رابط بوابة واتساب: محدَّد — سيُضمَّن في الملف` : "رابط بوابة واتساب: غير محدَّد — عبّئ الحقل أعلاه"}
+            </div>
+            <div className="flex items-center gap-2 text-xs font-medium text-green-700 dark:text-green-400">
+              <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+              رابط التطبيق: سيُستخرَج تلقائياً من النظام
+            </div>
+          </div>
+
+          {!readyToDownload && (
+            <div className="flex items-start gap-2 rounded-md bg-destructive/10 border border-destructive/20 px-3 py-2 text-xs text-destructive">
+              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+              <span>عبّئ الحقول المطلوبة واضغط <strong>حفظ الإعدادات</strong> أولاً لتمكين التحميل.</span>
+            </div>
+          )}
+
+          <div className="flex flex-col gap-2 pt-1">
+            <Button
+              variant="outline"
+              size="sm"
+              className={`justify-start gap-2 font-bold text-xs h-9 ${readyToDownload ? "border-green-500/40 text-green-700 dark:text-green-400 hover:bg-green-500/10" : "border-muted text-muted-foreground cursor-not-allowed opacity-60"}`}
+              onClick={() => downloadWorkflow("v22")}
+              disabled={downloadingV22}
+              data-testid="btn-download-workflow-v22"
             >
-              <Download className="h-3.5 w-3.5" />
-              تحميل Sidawi_AI_Health_V22.json
-              <span className="text-[10px] text-muted-foreground no-underline">(يحتوي على إشعار للمدير عند التفعيل — غيّر رقم المدير في node WA_Admin_Activation)</span>
-            </a>
-            <a
-              href="/api/v1/bot/workflow-v23"
-              download="Sidawi_AI_Health_V23.json"
-              className="inline-flex items-center gap-2 text-xs font-medium text-indigo-600 dark:text-indigo-400 underline underline-offset-2 hover:text-indigo-800"
-              data-testid="link-download-workflow-v23"
+              {downloadingV22 ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+              تحميل V22 — واتساب فقط
+              <span className="text-[10px] text-muted-foreground font-normal">(Sidawi_AI_Health_V22.json)</span>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className={`justify-start gap-2 font-bold text-xs h-9 ${readyToDownload ? "border-indigo-500/40 text-indigo-700 dark:text-indigo-400 hover:bg-indigo-500/10" : "border-muted text-muted-foreground cursor-not-allowed opacity-60"}`}
+              onClick={() => downloadWorkflow("v23")}
+              disabled={downloadingV23}
+              data-testid="btn-download-workflow-v23"
             >
-              <Download className="h-3.5 w-3.5" />
-              تحميل Sidawi_AI_Health_V23.json
-              <span className="text-[10px] text-muted-foreground no-underline">(يرسل إشعارات الأخطاء والتفعيل والتنظيف عبر /api/v1/bot/admin-notify)</span>
-            </a>
+              {downloadingV23 ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+              تحميل V23 — واتساب + تيليغرام
+              <span className="text-[10px] text-muted-foreground font-normal">(Sidawi_AI_Health_V23.json)</span>
+            </Button>
           </div>
         </div>
 
