@@ -300,7 +300,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const user = await storage.getUserByUsername(username);
     
     if (user && user.isOnline) {
-      const sessionTimeoutMs = 10 * 60 * 1000;
+      const sessionTimeoutMs = 5 * 60 * 1000;
       const isStale = !user.lastLoginAt || 
         (Date.now() - new Date(user.lastLoginAt).getTime()) > sessionTimeoutMs;
 
@@ -1332,8 +1332,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const incomingLid  = String(phoneNumber).trim();
       const incomingCode = activationCode ? String(activationCode).trim() : null;
 
-      // Helper: did the last interaction happen more than 10 minutes ago?
-      const AUTO_TIMEOUT_MS = 10 * 60 * 1000; // 10 دقائق
+      // Helper: did the last interaction happen more than 5 minutes ago?
+      const AUTO_TIMEOUT_MS = 5 * 60 * 1000; // 5 دقائق
       const isTimedOut = (lastInteraction: Date | null) => {
         if (!lastInteraction) return true;
         return Date.now() - new Date(lastInteraction).getTime() > AUTO_TIMEOUT_MS;
@@ -1356,9 +1356,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
 
         if (botUser.isBotActive) {
-          // الجلسة نشطة → فحص timeout 10 دقائق
+          // الجلسة نشطة → فحص timeout 5 دقائق
           if (isTimedOut(botUser.lastInteraction as Date | null)) {
-            // انتهت مدة 10 دقائق → إيقاف تلقائي
+            // انتهت مدة 5 دقائق → إيقاف تلقائي
             await storage.updateBotUser(botUser.id, { isBotActive: false, lastInteraction: new Date() });
             return res.json({
               authorized: true,
@@ -2326,7 +2326,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ─── Background Cron: Deactivate inactive bot sessions every 60 seconds ───
-  const INACTIVITY_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes
+  const INACTIVITY_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
   setInterval(async () => {
     try {
       const count = await storage.deactivateInactiveBotUsers(INACTIVITY_THRESHOLD_MS);

@@ -50,7 +50,7 @@ export function setupAuth(app: Express) {
         httpOnly: true,
         secure: process.env.COOKIE_SECURE === "true",
         sameSite: "lax",
-        maxAge: 10 * 60 * 1000, // 10 minutes session timeout
+        maxAge: 5 * 60 * 1000, // 5 minutes session timeout
       },
       store: new PostgresStore({
         pool,

@@ -25,7 +25,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-const SESSION_TIMEOUT_MS = 10 * 60 * 1000;
+const SESSION_TIMEOUT_MS = 5 * 60 * 1000;
 const WARNING_BEFORE_MS = 60 * 1000;
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
