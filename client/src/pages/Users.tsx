@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Plus, Trash2, Pencil, Bot, Users as UsersIcon, Phone, Key, FileText, Eye, X, RefreshCw, Wand2, ChevronsUpDown, Check, UserSearch, PenLine, SmartphoneNfc } from "lucide-react";
+import { Plus, Trash2, Pencil, Bot, Users as UsersIcon, Phone, Key, FileText, Eye, X, RefreshCw, Wand2, ChevronsUpDown, Check, UserSearch, PenLine, SmartphoneNfc, Bell, Send, MessageSquare, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertUserSchema, insertBotUserSchema, type InsertUser, type User, type BotUser, type InsertBotUser } from "@shared/schema";
@@ -19,7 +19,10 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { z } from "zod";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { Textarea } from "@/components/ui/textarea";
 import type { Employee } from "@shared/schema";
 
 // ─── System User Form ────────────────────────────────────────────────────────
@@ -501,6 +504,181 @@ function BotUserFormDialog({
   );
 }
 
+// ─── Send Notification Dialog ─────────────────────────────────────────────────
+
+type NotificationResult = { channel: string; success: boolean; error?: string };
+
+function SendNotificationDialog({
+  botUser,
+  open,
+  onOpenChange,
+}: {
+  botUser: BotUser;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const { toast } = useToast();
+  const [message, setMessage] = useState("");
+  const [channels, setChannels] = useState<string[]>(["whatsapp"]);
+  const [results, setResults] = useState<NotificationResult[] | null>(null);
+
+  function toggleChannel(ch: string) {
+    setChannels((prev) =>
+      prev.includes(ch) ? prev.filter((c) => c !== ch) : [...prev, ch]
+    );
+  }
+
+  const sendMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/bot-users/${botUser.id}/send-notification`, {
+        message,
+        channels,
+      });
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      setResults(data.results);
+      if (data.allSuccess) {
+        toast({ title: "تم إرسال الإشعار بنجاح", description: `إلى: ${botUser.fullName}` });
+      } else if (data.success) {
+        toast({ title: "تم الإرسال جزئياً", description: "بعض القنوات فشلت، راجع التفاصيل", variant: "destructive" });
+      } else {
+        toast({ title: "فشل الإرسال", description: "تحقق من إعدادات بوابة الواتساب والتيليغرام", variant: "destructive" });
+      }
+    },
+    onError: (e: any) => {
+      toast({ title: "خطأ في الإرسال", description: e.message, variant: "destructive" });
+    },
+  });
+
+  function handleClose() {
+    setMessage("");
+    setChannels(["whatsapp"]);
+    setResults(null);
+    onOpenChange(false);
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Bell className="h-5 w-5 text-primary" />
+            إرسال إشعار
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          {/* Recipient Info */}
+          <div className="flex items-center gap-3 rounded-lg border bg-muted/40 px-3 py-2.5">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <MessageSquare className="h-4 w-4" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-foreground truncate">{botUser.fullName}</p>
+              <p className="text-xs text-muted-foreground font-mono" dir="ltr">{botUser.phoneNumber}</p>
+            </div>
+          </div>
+
+          {/* Channel Selector */}
+          <div>
+            <p className="text-sm font-medium mb-2">قناة الإرسال</p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                data-testid="channel-whatsapp"
+                onClick={() => toggleChannel("whatsapp")}
+                className={cn(
+                  "flex flex-1 items-center justify-center gap-2 rounded-lg border py-2.5 text-sm font-medium transition-all",
+                  channels.includes("whatsapp")
+                    ? "border-green-500 bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400 dark:border-green-700"
+                    : "border-border text-muted-foreground hover:border-green-300 hover:text-green-700"
+                )}
+              >
+                <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                </svg>
+                واتساب
+              </button>
+              <button
+                type="button"
+                data-testid="channel-telegram"
+                onClick={() => toggleChannel("telegram")}
+                className={cn(
+                  "flex flex-1 items-center justify-center gap-2 rounded-lg border py-2.5 text-sm font-medium transition-all",
+                  channels.includes("telegram")
+                    ? "border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-700"
+                    : "border-border text-muted-foreground hover:border-blue-300 hover:text-blue-700"
+                )}
+              >
+                <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/>
+                </svg>
+                تيليغرام
+              </button>
+            </div>
+          </div>
+
+          {/* Message */}
+          <div>
+            <label className="text-sm font-medium mb-1.5 block">الرسالة</label>
+            <Textarea
+              data-testid="input-notification-message"
+              placeholder="اكتب نص الإشعار هنا..."
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              className="min-h-[100px] resize-none"
+            />
+          </div>
+
+          {/* Results */}
+          {results && (
+            <div className="space-y-2 rounded-lg border bg-muted/30 p-3">
+              <p className="text-xs font-semibold text-muted-foreground mb-2">نتائج الإرسال:</p>
+              {results.map((r) => (
+                <div key={r.channel} className="flex items-start gap-2">
+                  {r.success ? (
+                    <CheckCircle2 className="h-4 w-4 text-green-600 mt-0.5 shrink-0" />
+                  ) : (
+                    <XCircle className="h-4 w-4 text-red-600 mt-0.5 shrink-0" />
+                  )}
+                  <div>
+                    <span className="text-xs font-medium">
+                      {r.channel === "whatsapp" ? "واتساب" : "تيليغرام"}:
+                    </span>
+                    {r.success ? (
+                      <span className="text-xs text-green-700 dark:text-green-400 mr-1">تم الإرسال بنجاح</span>
+                    ) : (
+                      <span className="text-xs text-red-700 dark:text-red-400 mr-1">{r.error}</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-end gap-2 pt-2">
+          <Button type="button" variant="outline" onClick={handleClose}>إغلاق</Button>
+          <Button
+            data-testid="button-send-notification"
+            onClick={() => sendMutation.mutate()}
+            disabled={!message.trim() || channels.length === 0 || sendMutation.isPending}
+            className="gap-2"
+          >
+            {sendMutation.isPending ? (
+              <RefreshCw className="h-4 w-4 animate-spin" />
+            ) : (
+              <Send className="h-4 w-4" />
+            )}
+            {sendMutation.isPending ? "جاري الإرسال..." : "إرسال"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Document Viewer Dialog ───────────────────────────────────────────────────
 
 function EmployeeDocsDialog({
@@ -602,6 +780,7 @@ export default function UsersPage() {
   const [isAddBotOpen, setIsAddBotOpen] = useState(false);
   const [editingBotUser, setEditingBotUser] = useState<BotUser | undefined>(undefined);
   const [docsPhone, setDocsPhone] = useState<string | null>(null);
+  const [notifyBotUser, setNotifyBotUser] = useState<BotUser | undefined>(undefined);
 
   const isLoading = usersLoading || botUsersLoading;
 
@@ -809,6 +988,15 @@ export default function UsersPage() {
                           <Button
                             variant="ghost"
                             size="icon"
+                            data-testid={`button-notify-${bu.id}`}
+                            title="إرسال إشعار"
+                            onClick={() => setNotifyBotUser(bu)}
+                          >
+                            <Bell className="h-4 w-4 text-purple-600" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
                             data-testid={`button-docs-${bu.id}`}
                             title="عرض المستندات"
                             onClick={() => setDocsPhone(bu.phoneNumber)}
@@ -917,6 +1105,14 @@ export default function UsersPage() {
           phoneNumber={docsPhone}
           open={!!docsPhone}
           onOpenChange={(open) => { if (!open) setDocsPhone(null); }}
+        />
+      )}
+
+      {notifyBotUser && (
+        <SendNotificationDialog
+          botUser={notifyBotUser}
+          open={!!notifyBotUser}
+          onOpenChange={(open) => { if (!open) setNotifyBotUser(undefined); }}
         />
       )}
     </Layout>

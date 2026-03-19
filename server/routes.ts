@@ -1032,6 +1032,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  app.get("/api/settings", async (req, res) => {
+    if (req.user?.role !== 'admin') return res.status(403).send("Unauthorized");
+    const allSettings = await storage.getAllSettings();
+    res.json(allSettings);
+  });
+
   app.post(api.settings.update.path, async (req, res) => {
     if (req.user?.role !== 'admin') return res.status(403).send("Unauthorized");
     const { key, value } = req.body;
@@ -1337,6 +1343,100 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.status(204).end();
     } catch (err) {
       res.status(500).json({ message: "خطأ في حذف مستخدم البوت" });
+    }
+  });
+
+  // ─── POST /api/bot-users/:id/send-notification ───────────────────────────
+  // إرسال إشعار لمستخدم بوت محدد عبر واتساب أو تيليغرام
+  app.post("/api/bot-users/:id/send-notification", async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const { message, channels } = req.body as { message: string; channels: string[] };
+
+      if (!message || !channels || channels.length === 0) {
+        return res.status(400).json({ message: "الرسالة والقنوات مطلوبة" });
+      }
+
+      const botUser = await storage.getBotUser(id);
+      if (!botUser) {
+        return res.status(404).json({ message: "مستخدم البوت غير موجود" });
+      }
+
+      const results: { channel: string; success: boolean; error?: string }[] = [];
+
+      // ── إرسال عبر واتساب ──────────────────────────────────────────────────
+      if (channels.includes("whatsapp")) {
+        const gatewayUrl = await storage.getSetting("whatsapp_gateway_url");
+        const gatewayToken = await storage.getSetting("whatsapp_gateway_token");
+
+        if (!gatewayUrl || !gatewayToken) {
+          results.push({ channel: "whatsapp", success: false, error: "إعدادات بوابة واتساب غير مُهيّأة" });
+        } else {
+          try {
+            const phone = botUser.phoneNumber.replace(/\D/g, "");
+            const waRes = await fetch(String(gatewayUrl), {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${String(gatewayToken)}`,
+              },
+              body: JSON.stringify({ phone, message }),
+            });
+            if (waRes.ok) {
+              results.push({ channel: "whatsapp", success: true });
+            } else {
+              const errBody = await waRes.text();
+              results.push({ channel: "whatsapp", success: false, error: errBody || `HTTP ${waRes.status}` });
+            }
+          } catch (e: any) {
+            results.push({ channel: "whatsapp", success: false, error: e.message });
+          }
+        }
+      }
+
+      // ── إرسال عبر تيليغرام ────────────────────────────────────────────────
+      if (channels.includes("telegram")) {
+        const botToken = await storage.getSetting("telegram_bot_token");
+        const chatId = await storage.getSetting("telegram_notification_chat_id");
+
+        if (!botToken || !chatId) {
+          results.push({ channel: "telegram", success: false, error: "إعدادات بوت تيليغرام غير مُهيّأة" });
+        } else {
+          try {
+            const tgRes = await fetch(`https://api.telegram.org/bot${String(botToken)}/sendMessage`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ chat_id: String(chatId), text: message }),
+            });
+            const tgBody = await tgRes.json() as any;
+            if (tgRes.ok && tgBody.ok) {
+              results.push({ channel: "telegram", success: true });
+            } else {
+              results.push({ channel: "telegram", success: false, error: tgBody?.description || `HTTP ${tgRes.status}` });
+            }
+          } catch (e: any) {
+            results.push({ channel: "telegram", success: false, error: e.message });
+          }
+        }
+      }
+
+      const allSuccess = results.every(r => r.success);
+      const anySuccess = results.some(r => r.success);
+
+      if (req.user) {
+        await storage.createAuditLog({
+          userId: req.user.id,
+          action: "NOTIFY",
+          entityType: "BOT_USER",
+          entityId: String(id),
+          oldValues: null,
+          newValues: { message, channels, results },
+        });
+      }
+
+      res.json({ success: anySuccess, allSuccess, results, recipient: botUser.fullName });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "خطأ في إرسال الإشعار" });
     }
   });
 
