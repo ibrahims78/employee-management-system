@@ -628,7 +628,10 @@ function NotificationSettingsCard() {
 
   useEffect(() => {
     if (!settings) return;
-    const find = (key: string) => settings.find((s: any) => s.key === key)?.value ?? "";
+    const find = (key: string) => {
+      const v = settings.find((s: any) => s.key === key)?.value;
+      return (v != null) ? String(v) : "";
+    };
     setAdminPhone(find("admin_notification_phone"));
     setWaUrl(find("whatsapp_gateway_url"));
     setWaToken(find("whatsapp_gateway_token"));
