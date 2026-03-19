@@ -1088,6 +1088,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       missing.push("whatsapp_gateway_url");
     }
 
+    // 4. Admin phone number (for V22's WA_Admin_Activation node)
+    const adminPhone = await storage.getSetting("admin_notification_phone");
+    const OLD_ADMIN_PHONE = "9671XXXXXXXXXX";
+    if (adminPhone && String(adminPhone).replace(/\D/g, "").length >= 8) {
+      content = content.split(OLD_ADMIN_PHONE).join(String(adminPhone).replace(/\D/g, ""));
+    }
+    // admin phone is optional — no missing push, node simply keeps placeholder if not set
+
     return { json: content, missing };
   }
 
