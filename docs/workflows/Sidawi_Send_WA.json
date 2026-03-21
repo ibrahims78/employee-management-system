@@ -1,0 +1,89 @@
+{
+  "name": "Sidawi_Send_WA",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "sidawi-send-wa",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "send-wa-webhook-001",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-480, 0],
+      "webhookId": "sidawi-send-wa-trigger"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://172.17.0.1:8082/send-text",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "number",
+              "value": "={{ $json.number }}"
+            },
+            {
+              "name": "message",
+              "value": "={{ $json.message }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "send-wa-gateway-001",
+      "name": "Send_to_WA_Gateway",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [-240, 0],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: !$json.error }) }}"
+      },
+      "id": "send-wa-respond-001",
+      "name": "Respond_to_Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [0, 0]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Send_to_WA_Gateway",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send_to_WA_Gateway": {
+      "main": [
+        [
+          {
+            "node": "Respond_to_Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "sidawi-send-wa-v1",
+  "meta": {
+    "notes": "Sidawi Send WA: يستقبل { number, message } ويُرسِل عبر بوابة واتساب المحلية. استورده في n8n واحصل على رابط الـ Webhook ثم أدخله في إعدادات النظام."
+  },
+  "tags": ["helper", "whatsapp", "send"]
+}

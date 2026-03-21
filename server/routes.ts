@@ -1131,6 +1131,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // ─── GET /api/v1/bot/workflow-send-wa ────────────────────────────────────────
+  app.get("/api/v1/bot/workflow-send-wa", async (req, res) => {
+    if (req.user?.role !== 'admin') return res.status(403).send("Unauthorized");
+    try {
+      const { json, missing } = await buildWorkflowJson(req, "Sidawi_Send_WA.json");
+      res.setHeader("Content-Type", "application/json");
+      res.setHeader("Content-Disposition", 'attachment; filename="Sidawi_Send_WA.json"');
+      res.send(json);
+    } catch (e: any) {
+      res.status(404).json({ message: "ملف الورك فلو غير موجود" });
+    }
+  });
+
   app.post(api.settings.update.path, async (req, res) => {
     if (req.user?.role !== 'admin') return res.status(403).send("Unauthorized");
     const { key, value } = req.body;
@@ -1458,19 +1471,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       const results: { channel: string; success: boolean; error?: string }[] = [];
 
-      // ── إرسال عبر واتساب ──────────────────────────────────────────────────
-      const adminPhone   = await storage.getSetting("admin_notification_phone");
-      const gatewayUrl   = await storage.getSetting("whatsapp_gateway_url");
-      const gatewayToken = await storage.getSetting("whatsapp_gateway_token");
+      // ── إرسال عبر واتساب (عبر n8n webhook) ───────────────────────────────
+      const adminPhone    = await storage.getSetting("admin_notification_phone");
+      const n8nWaWebhook  = await storage.getSetting("n8n_wa_send_webhook");
 
-      if (adminPhone && gatewayUrl) {
+      if (adminPhone && n8nWaWebhook) {
         try {
           const number = String(adminPhone).replace(/\D/g, "");
-          const waHeaders: Record<string, string> = { "Content-Type": "application/json" };
-          if (gatewayToken) waHeaders["Authorization"] = `Bearer ${String(gatewayToken)}`;
-          const waRes = await fetch(String(gatewayUrl), {
+          const waRes = await fetch(String(n8nWaWebhook), {
             method: "POST",
-            headers: waHeaders,
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ number, message }),
           });
           if (waRes.ok) {
@@ -1546,21 +1556,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       const results: { channel: string; success: boolean; error?: string }[] = [];
 
-      // ── إرسال عبر واتساب ──────────────────────────────────────────────────
+      // ── إرسال عبر واتساب (عبر n8n webhook) ───────────────────────────────
       if (channels.includes("whatsapp")) {
-        const gatewayUrl = await storage.getSetting("whatsapp_gateway_url");
-        const gatewayToken = await storage.getSetting("whatsapp_gateway_token");
+        const n8nWaWebhook = await storage.getSetting("n8n_wa_send_webhook");
 
-        if (!gatewayUrl) {
-          results.push({ channel: "whatsapp", success: false, error: "رابط بوابة واتساب غير مُهيّأ" });
+        if (!n8nWaWebhook) {
+          results.push({ channel: "whatsapp", success: false, error: "رابط n8n لإرسال واتساب غير مُهيّأ — راجع إعدادات الإشعارات" });
         } else {
           try {
             const number = botUser.phoneNumber.replace(/\D/g, "");
-            const waHeaders: Record<string, string> = { "Content-Type": "application/json" };
-            if (gatewayToken) waHeaders["Authorization"] = `Bearer ${String(gatewayToken)}`;
-            const waRes = await fetch(String(gatewayUrl), {
+            const waRes = await fetch(String(n8nWaWebhook), {
               method: "POST",
-              headers: waHeaders,
+              headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ number, message }),
             });
             if (waRes.ok) {
