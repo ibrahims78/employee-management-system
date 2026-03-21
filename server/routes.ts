@@ -1486,11 +1486,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           if (waRes.ok) {
             results.push({ channel: "whatsapp", success: true });
           } else {
-            const errBody = await waRes.text();
-            results.push({ channel: "whatsapp", success: false, error: errBody || `HTTP ${waRes.status}` });
+            const errText = await waRes.text();
+            const isHtml = errText.trim().startsWith("<");
+            const errMsg = isHtml
+              ? `فشل الإرسال — بوابة واتساب غير متاحة (HTTP ${waRes.status}). تحقق من تشغيل خدمة واتساب على السيرفر.`
+              : errText || `HTTP ${waRes.status}`;
+            results.push({ channel: "whatsapp", success: false, error: errMsg });
           }
         } catch (e: any) {
-          results.push({ channel: "whatsapp", success: false, error: e.message });
+          results.push({ channel: "whatsapp", success: false, error: `تعذّر الاتصال ببوابة واتساب: ${e.message}` });
         }
       }
 
@@ -1573,11 +1577,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             if (waRes.ok) {
               results.push({ channel: "whatsapp", success: true });
             } else {
-              const errBody = await waRes.text();
-              results.push({ channel: "whatsapp", success: false, error: errBody || `HTTP ${waRes.status}` });
+              const errText = await waRes.text();
+              const isHtml = errText.trim().startsWith("<");
+              const errMsg = isHtml
+                ? `فشل الإرسال — بوابة واتساب غير متاحة (HTTP ${waRes.status}). تحقق من تشغيل خدمة واتساب على السيرفر.`
+                : errText || `HTTP ${waRes.status}`;
+              results.push({ channel: "whatsapp", success: false, error: errMsg });
             }
           } catch (e: any) {
-            results.push({ channel: "whatsapp", success: false, error: e.message });
+            results.push({ channel: "whatsapp", success: false, error: `تعذّر الاتصال ببوابة واتساب: ${e.message}` });
           }
         }
       }
