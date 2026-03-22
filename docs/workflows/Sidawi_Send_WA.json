@@ -5,7 +5,7 @@
       "parameters": {
         "httpMethod": "POST",
         "path": "sidawi-send-wa",
-        "responseMode": "responseNode",
+        "responseMode": "onReceived",
         "options": {}
       },
       "id": "send-wa-webhook-001",
@@ -35,7 +35,9 @@
             }
           ]
         },
-        "options": {}
+        "options": {
+          "timeout": 10000
+        }
       },
       "id": "send-wa-gateway-001",
       "name": "Send_to_WA_Gateway",
@@ -46,20 +48,6 @@
         0
       ],
       "continueOnFail": true
-    },
-    {
-      "parameters": {
-        "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({ success: !$json.error }) }}"
-      },
-      "id": "send-wa-respond-001",
-      "name": "Respond_to_Webhook",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.1,
-      "position": [
-        0,
-        0
-      ]
     }
   ],
   "connections": {
@@ -73,26 +61,15 @@
           }
         ]
       ]
-    },
-    "Send_to_WA_Gateway": {
-      "main": [
-        [
-          {
-            "node": "Respond_to_Webhook",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
     }
   },
-  "active": false,
+  "active": true,
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "sidawi-send-wa-v1",
+  "versionId": "sidawi-send-wa-v2",
   "meta": {
-    "notes": "Sidawi Send WA: يستقبل { number, message } ويُرسِل عبر بوابة واتساب المحلية. استورده في n8n واحصل على رابط الـ Webhook ثم أدخله في إعدادات النظام."
+    "notes": "Sidawi Send WA v2: يستقبل { number, message } ويرد فوراً بـ 200 ثم يُرسِل عبر بوابة واتساب المحلية بشكل غير متزامن. استورده في n8n وتأكد أنه نشط (Active)، ثم استخدم الرابط: https://<domain>/webhook/sidawi-send-wa"
   },
   "tags": [
     "helper",
