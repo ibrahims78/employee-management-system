@@ -182,7 +182,7 @@
           "parameters": [
             {
               "name": "number",
-              "value": "={{ $('Verify_Identity').item.json.phone_number }}"
+              "value": "={{ $('Verify_Identity').item.json.phone_number || $('Sidawi_Health_WH').item.json.body.from }}"
             },
             {
               "name": "message",
@@ -210,7 +210,7 @@
           "parameters": [
             {
               "name": "number",
-              "value": "={{ $('Verify_Identity').item.json.phone_number }}"
+              "value": "={{ $('Verify_Identity').item.json.phone_number || $('Sidawi_Health_WH').item.json.body.from }}"
             },
             {
               "name": "message",
@@ -238,7 +238,7 @@
           "parameters": [
             {
               "name": "number",
-              "value": "={{ $('Verify_Identity').item.json.phone_number }}"
+              "value": "={{ $('Verify_Identity').item.json.phone_number || $('Sidawi_Health_WH').item.json.body.from }}"
             },
             {
               "name": "message",
@@ -344,7 +344,7 @@
           "parameters": [
             {
               "name": "number",
-              "value": "={{ $('Verify_Identity').item.json.phone_number }}"
+              "value": "={{ $('Verify_Identity').item.json.phone_number || $('Sidawi_Health_WH').item.json.body.from }}"
             },
             {
               "name": "message",
