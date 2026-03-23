@@ -62,6 +62,15 @@ async function sendWhatsAppWithRetry(
   return { success: false, error: `فشل الإرسال بعد ${maxRetries} محاولات — ${lastError}. تحقق من استقرار الاتصال بالسيرفر.` };
 }
 
+// ── دالة مساعدة: تُرجع base URL الصحيح للسيرفر ──────────────────────────────
+// تُفضّل x-forwarded-host (domain الإنتاج الحقيقي) على req.get("host")
+// الذي قد يُرجع domain داخلي مؤقت في بيئة Replit
+function getBaseUrl(req: Request): string {
+  const protocol = (req.headers["x-forwarded-proto"] as string)?.split(",")[0]?.trim() || req.protocol || "https";
+  const host     = (req.headers["x-forwarded-host"] as string)?.split(",")[0]?.trim() || req.get("host") || "localhost";
+  return `${protocol}://${host}`;
+}
+
 // يجرّب رابط النشر أولاً، ثم رابط الاختبار كبديل — ينجح إذا نجح أيٌّ منهما
 async function sendWhatsAppTryBoth(
   prodUrl: string | null | undefined,
@@ -1934,9 +1943,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
 
       // Build download URLs
-      const protocol = req.protocol;
-      const host = req.get("host") || "localhost";
-      const baseUrl = `${protocol}://${host}`;
+      const baseUrl = getBaseUrl(req);
       const apiToken = (req.query._t as string) || (req.headers["x-api-key"] as string) || "";
 
       const documents = docPaths.map((docPath) => {
